@@ -38,7 +38,7 @@ export const registerReactionHandlers = (
             timestamp: Date.now(),
           };
 
-          socket.to(context.currentRoom.id).emit("reaction", reaction);
+          socket.to(context.currentRoom.channelId).emit("reaction", reaction);
           callback({ success: true });
           return;
         }
@@ -61,7 +61,7 @@ export const registerReactionHandlers = (
           timestamp: Date.now(),
         };
 
-        socket.to(context.currentRoom.id).emit("reaction", reaction);
+        socket.to(context.currentRoom.channelId).emit("reaction", reaction);
         callback({ success: true });
       } catch (error) {
         callback({ error: (error as Error).message });

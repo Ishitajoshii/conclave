@@ -67,7 +67,7 @@ export default function MeetsHeader({
 
         {isJoined && (
           <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3">
-            {isAdmin && (
+            {roomId.trim() && (
               <span 
                 className="text-[12px] text-[#FEFCD9]/50"
                 style={{ fontFamily: "'PolySans Mono', monospace" }}

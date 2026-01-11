@@ -9,13 +9,27 @@ type RoomsResponse = {
 const resolveSfuUrl = () =>
   process.env.SFU_URL || process.env.NEXT_PUBLIC_SFU_URL || "http://localhost:3031";
 
-export async function GET() {
+const resolveClientId = (request: Request) => {
+  const envClientId =
+    process.env.SFU_CLIENT_ID || process.env.NEXT_PUBLIC_SFU_CLIENT_ID;
+  if (envClientId?.trim()) {
+    return envClientId.trim();
+  }
+
+  return request.headers.get("x-sfu-client")?.trim() || "";
+};
+
+export async function GET(request: Request) {
   const sfuUrl = resolveSfuUrl();
   const secret = process.env.SFU_SECRET || "development-secret";
+  const clientId = resolveClientId(request);
 
   try {
     const response = await fetch(`${sfuUrl}/rooms`, {
-      headers: { "x-sfu-secret": secret },
+      headers: {
+        "x-sfu-secret": secret,
+        ...(clientId ? { "x-sfu-client": clientId } : {}),
+      },
       cache: "no-store",
     });
 

@@ -11,17 +11,25 @@ type JoinRequestBody = {
     email?: string | null;
     name?: string | null;
   };
+  isHost?: boolean;
   isAdmin?: boolean;
+  clientId?: string;
 };
-
-const parseAdminEmails = (value?: string) =>
-  (value ?? "")
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean);
 
 const resolveSfuUrl = () =>
   process.env.SFU_URL || process.env.NEXT_PUBLIC_SFU_URL || "http://localhost:3031";
+
+const resolveClientId = (request: Request, body?: JoinRequestBody) => {
+  const envClientId =
+    process.env.SFU_CLIENT_ID || process.env.NEXT_PUBLIC_SFU_CLIENT_ID;
+  if (envClientId?.trim()) {
+    return envClientId.trim();
+  }
+
+  const headerClientId = request.headers.get("x-sfu-client")?.trim() || "";
+  const bodyClientId = body?.clientId?.trim() || "";
+  return headerClientId || bodyClientId || "default";
+};
 
 export async function POST(request: Request) {
   let body: JoinRequestBody;
@@ -42,22 +50,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing session ID" }, { status: 400 });
   }
 
+  const clientId = resolveClientId(request, body);
   const email = body?.user?.email?.trim() || undefined;
   const name = body?.user?.name?.trim() || undefined;
   const providedId = body?.user?.id?.trim() || undefined;
   const baseUserId = email || providedId || `guest-${sessionId}`;
-  const adminEmails = parseAdminEmails(process.env.SFU_ADMIN_EMAILS);
-  const resolvedAdmin =
-    adminEmails.length > 0
-      ? Boolean(email && adminEmails.includes(email.toLowerCase()))
-      : Boolean(body?.isAdmin);
+  const isHost = Boolean(body?.isHost ?? body?.isAdmin);
 
   const token = jwt.sign(
     {
       userId: baseUserId,
       email,
       name,
-      isAdmin: resolvedAdmin,
+      isHost,
+      isAdmin: isHost,
+      clientId,
       sessionId,
     },
     process.env.SFU_SECRET || "development-secret",

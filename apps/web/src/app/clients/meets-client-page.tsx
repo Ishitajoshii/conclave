@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 import MeetsClient from "./meets-client";
 
 const reactionAssets = [
@@ -20,23 +20,42 @@ const readError = async (response: Response) => {
   return response.statusText || "Request failed";
 };
 
-export default function MeetsClientPage() {
-  const userIdRef = useRef(
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `guest-${Math.random().toString(36).slice(2, 10)}`
-  );
+const clientId = process.env.NEXT_PUBLIC_SFU_CLIENT_ID || "public";
+const isPublicClient = clientId === "public";
 
+type MeetsClientPageProps = {
+  initialRoomId?: string;
+};
+
+export default function MeetsClientPage({ initialRoomId }: MeetsClientPageProps) {
   const user = undefined;
 
   const isAdmin = false;
 
   const getJoinInfo = useCallback(
-    async (roomId: string, sessionId: string) => {
+    async (
+      roomId: string,
+      sessionId: string,
+      options?: {
+        user?: { id?: string; email?: string | null; name?: string | null };
+        isHost?: boolean;
+      }
+    ) => {
+      const resolvedUser = options?.user ?? user;
+      const isHost = Boolean(options?.isHost);
       const response = await fetch("/api/sfu/join", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roomId, sessionId, user, isAdmin }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-sfu-client": clientId,
+        },
+        body: JSON.stringify({
+          roomId,
+          sessionId,
+          user: resolvedUser,
+          isHost,
+          clientId,
+        }),
       });
 
       if (!response.ok) {
@@ -49,7 +68,10 @@ export default function MeetsClientPage() {
   );
 
   const getRooms = useCallback(async () => {
-    const response = await fetch("/api/sfu/rooms", { cache: "no-store" });
+    const response = await fetch("/api/sfu/rooms", {
+      cache: "no-store",
+      headers: { "x-sfu-client": clientId },
+    });
     if (!response.ok) {
       throw new Error(await readError(response));
     }
@@ -62,9 +84,15 @@ export default function MeetsClientPage() {
     [getRooms]
   );
 
+  const resolvedInitialRoomId =
+    initialRoomId ?? (isPublicClient ? "" : "default-room");
+
   return (
     <div className="w-full h-full min-h-screen bg-[#060606] overflow-auto relative">
       <MeetsClient
+        initialRoomId={resolvedInitialRoomId}
+        enableRoomRouting={isPublicClient}
+        allowGhostMode={!isPublicClient}
         getJoinInfo={getJoinInfo}
         getRooms={getRooms}
         getRoomsForRedirect={getRoomsForRedirect}

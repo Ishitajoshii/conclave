@@ -53,7 +53,7 @@ export const registerMediaHandlers = (context: ConnectionContext): void => {
 
         context.currentClient.addProducer(producer);
 
-        socket.to(context.currentRoom.id).emit("newProducer", {
+        socket.to(context.currentRoom.channelId).emit("newProducer", {
           producerId: producer.id,
           producerUserId: context.currentClient.id,
           kind,
@@ -61,7 +61,7 @@ export const registerMediaHandlers = (context: ConnectionContext): void => {
           paused: producer.paused,
         });
 
-        const roomId = context.currentRoom.id;
+        const roomChannelId = context.currentRoom.channelId;
         const clientId = context.currentClient.id;
 
         let producerClosed = false;
@@ -70,14 +70,14 @@ export const registerMediaHandlers = (context: ConnectionContext): void => {
           producerClosed = true;
 
           Logger.info(`Producer closed: ${producer.id}`);
-          const room = state.rooms.get(roomId);
+          const room = state.rooms.get(roomChannelId);
           if (!room) return;
 
           if (type === "screen") {
             room.clearScreenShareProducer(producer.id);
           }
 
-          socket.to(roomId).emit("producerClosed", {
+          socket.to(roomChannelId).emit("producerClosed", {
             producerId: producer.id,
             producerUserId: clientId,
           });
@@ -215,7 +215,7 @@ export const registerMediaHandlers = (context: ConnectionContext): void => {
 
         await context.currentClient.toggleMute(data.paused);
 
-        socket.to(context.currentRoom.id).emit("participantMuted", {
+        socket.to(context.currentRoom.channelId).emit("participantMuted", {
           userId: context.currentClient.id,
           muted: data.paused,
         });
@@ -245,7 +245,7 @@ export const registerMediaHandlers = (context: ConnectionContext): void => {
 
         await context.currentClient.toggleCamera(data.paused);
 
-        socket.to(context.currentRoom.id).emit("participantCameraOff", {
+        socket.to(context.currentRoom.channelId).emit("participantCameraOff", {
           userId: context.currentClient.id,
           cameraOff: data.paused,
         });
@@ -276,7 +276,7 @@ export const registerMediaHandlers = (context: ConnectionContext): void => {
             context.currentRoom.clearScreenShareProducer(data.producerId);
           }
 
-          socket.to(context.currentRoom.id).emit("producerClosed", {
+          socket.to(context.currentRoom.channelId).emit("producerClosed", {
             producerId: data.producerId,
             producerUserId: context.currentClient.id,
           });

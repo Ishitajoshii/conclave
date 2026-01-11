@@ -29,6 +29,8 @@ interface MeetsMainContentProps {
   setRoomId: Dispatch<SetStateAction<string>>;
   joinRoom: () => void;
   joinRoomById: (roomId: string) => void;
+  enableRoomRouting: boolean;
+  allowGhostMode: boolean;
   user?: {
     id?: string;
     email?: string | null;
@@ -96,6 +98,8 @@ export default function MeetsMainContent({
   setRoomId,
   joinRoom,
   joinRoomById,
+  enableRoomRouting,
+  allowGhostMode,
   user,
   userEmail,
   isAdmin,
@@ -168,6 +172,8 @@ export default function MeetsMainContent({
           userEmail={userEmail}
           connectionState={connectionState}
           isAdmin={isAdmin}
+          enableRoomRouting={enableRoomRouting}
+          allowGhostMode={allowGhostMode}
           showPermissionHint={showPermissionHint}
           rooms={availableRooms}
           roomsStatus={roomsStatus}

@@ -51,7 +51,7 @@ export const registerDisplayNameHandlers = (
         );
 
         for (const userId of updatedUserIds) {
-          io.to(context.currentRoom.id).emit("displayNameUpdated", {
+          io.to(context.currentRoom.channelId).emit("displayNameUpdated", {
             userId,
             displayName,
             roomId: context.currentRoom.id,

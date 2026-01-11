@@ -49,7 +49,7 @@ export const registerChatHandlers = (context: ConnectionContext): void => {
           timestamp: Date.now(),
         };
 
-        socket.to(context.currentRoom.id).emit("chatMessage", message);
+        socket.to(context.currentRoom.channelId).emit("chatMessage", message);
         Logger.info(
           `Chat in room ${context.currentRoom.id}: ${displayName}: ${content.substring(
             0,

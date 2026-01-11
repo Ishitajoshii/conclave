@@ -15,6 +15,7 @@ export const registerDisconnectHandlers = (
     if (context.currentRoom && context.currentClient) {
       const userId = context.currentClient.id;
       const roomId = context.currentRoom.id;
+      const roomChannelId = context.currentRoom.channelId;
       const wasAdmin = context.currentClient instanceof Admin;
       const activeClient = context.currentRoom.getClient(userId);
 
@@ -34,7 +35,7 @@ export const registerDisconnectHandlers = (
             excludeUserId: userId,
           });
         } else {
-          socket.to(roomId).emit("userLeft", { userId });
+          socket.to(roomChannelId).emit("userLeft", { userId });
         }
 
         if (wasAdmin) {
@@ -54,8 +55,8 @@ export const registerDisconnectHandlers = (
               }
             }
             context.currentRoom.startCleanupTimer(() => {
-              if (state.rooms.has(roomId)) {
-                const room = state.rooms.get(roomId);
+              if (state.rooms.has(roomChannelId)) {
+                const room = state.rooms.get(roomChannelId);
                 if (room) {
                   if (room.hasActiveAdmin()) {
                     return;
@@ -72,7 +73,7 @@ export const registerDisconnectHandlers = (
                     Logger.info(
                       `Cleanup executed for room ${roomId}. Room is empty.`,
                     );
-                    cleanupRoom(state, roomId);
+                    cleanupRoom(state, roomChannelId);
                   }
                 }
               }
@@ -82,26 +83,32 @@ export const registerDisconnectHandlers = (
           }
         }
 
-        if (state.rooms.has(roomId)) {
-          cleanupRoom(state, roomId);
+        if (state.rooms.has(roomChannelId)) {
+          cleanupRoom(state, roomChannelId);
         }
 
         Logger.info(`User ${userId} left room ${roomId}`);
 
-        if (state.rooms.has(roomId)) {
-          const room = state.rooms.get(roomId);
+        if (state.rooms.has(roomChannelId)) {
+          const room = state.rooms.get(roomChannelId);
           if (room) {
             const newQuality = room.updateVideoQuality();
             if (newQuality) {
-              socket.to(roomId).emit("setVideoQuality", { quality: newQuality });
+              socket
+                .to(roomChannelId)
+                .emit("setVideoQuality", { quality: newQuality });
             }
           }
         }
       }
     }
 
-    if (!context.currentClient && context.pendingRoomId && context.pendingUserKey) {
-      const pendingRoom = state.rooms.get(context.pendingRoomId);
+    if (
+      !context.currentClient &&
+      context.pendingRoomChannelId &&
+      context.pendingUserKey
+    ) {
+      const pendingRoom = state.rooms.get(context.pendingRoomChannelId);
       if (pendingRoom) {
         const pending = pendingRoom.pendingClients.get(context.pendingUserKey);
         if (pending?.socket?.id === socket.id) {
@@ -113,7 +120,7 @@ export const registerDisconnectHandlers = (
             });
           }
           if (pendingRoom.isEmpty()) {
-            cleanupRoom(state, context.pendingRoomId);
+            cleanupRoom(state, context.pendingRoomChannelId);
           }
         }
       }
@@ -122,6 +129,7 @@ export const registerDisconnectHandlers = (
     context.currentRoom = null;
     context.currentClient = null;
     context.pendingRoomId = null;
+    context.pendingRoomChannelId = null;
     context.pendingUserKey = null;
     context.currentUserKey = null;
   });

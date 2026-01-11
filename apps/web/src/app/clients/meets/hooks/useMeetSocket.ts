@@ -33,8 +33,16 @@ interface UseMeetSocketOptions {
   roomId: string;
   setRoomId: (roomId: string) => void;
   isAdmin: boolean;
+  user?: { id?: string; email?: string | null; name?: string | null };
   userId: string;
-  getJoinInfo: (roomId: string, sessionId: string) => Promise<{
+  getJoinInfo: (
+    roomId: string,
+    sessionId: string,
+    options?: {
+      user?: { id?: string; email?: string | null; name?: string | null };
+      isHost?: boolean;
+    }
+  ) => Promise<{
     token: string;
     sfuUrl: string;
   }>;
@@ -81,6 +89,7 @@ export function useMeetSocket({
   roomId,
   setRoomId,
   isAdmin,
+  user,
   userId,
   getJoinInfo,
   ghostEnabled,
@@ -736,7 +745,8 @@ export function useMeetSocket({
 
             const { token, sfuUrl } = await getJoinInfo(
               roomIdForJoin,
-              sessionIdRef.current
+              sessionIdRef.current,
+              { user, isHost: isAdmin }
             );
 
             const socket = io(sfuUrl, {
@@ -1262,6 +1272,7 @@ export function useMeetSocket({
       socketRef,
       stopLocalTrack,
       updateVideoQualityRef,
+      user,
       userId,
     ]
   );

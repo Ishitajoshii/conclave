@@ -10,6 +10,7 @@ export type ConnectionContext = {
   currentRoom: Room | null;
   currentClient: Client | null;
   pendingRoomId: string | null;
+  pendingRoomChannelId: string | null;
   pendingUserKey: string | null;
   currentUserKey: string | null;
 };
@@ -26,6 +27,7 @@ export const createConnectionContext = (
     currentRoom: null,
     currentClient: null,
     pendingRoomId: null,
+    pendingRoomChannelId: null,
     pendingUserKey: null,
     currentUserKey: null,
   };

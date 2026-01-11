@@ -10,7 +10,7 @@ import { Logger } from "../../../utilities/loggers.js";
 import { MAX_DISPLAY_NAME_LENGTH } from "../../constants.js";
 import { buildUserIdentity, normalizeDisplayName } from "../../identity.js";
 import { emitUserJoined, emitUserLeft } from "../../notifications.js";
-import { cleanupRoom, getOrCreateRoom } from "../../rooms.js";
+import { cleanupRoom, getOrCreateRoom, getRoomChannelId } from "../../rooms.js";
 import type { ConnectionContext } from "../context.js";
 import { registerAdminHandlers } from "./adminHandlers.js";
 
@@ -26,23 +26,20 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
       try {
         const { roomId, sessionId } = data;
         const user = (socket as any).user;
-        const isAdmin = user?.isAdmin;
-        const requestedDisplayName = isAdmin
-          ? normalizeDisplayName(data?.displayName)
-          : "";
+        const hostRequested = Boolean(user?.isHost ?? user?.isAdmin);
+        const clientId =
+          typeof user?.clientId === "string" ? user.clientId : "default";
+        const clientPolicy =
+          config.clientPolicies[clientId] ?? config.clientPolicies.default;
+        const displayNameCandidate = normalizeDisplayName(data?.displayName);
         if (
-          requestedDisplayName &&
-          requestedDisplayName.length > MAX_DISPLAY_NAME_LENGTH
+          displayNameCandidate &&
+          displayNameCandidate.length > MAX_DISPLAY_NAME_LENGTH
         ) {
           callback({ error: "Display name too long" });
           return;
         }
-        const identity = buildUserIdentity(
-          user,
-          sessionId,
-          socket.id,
-          requestedDisplayName || undefined,
-        );
+        const identity = buildUserIdentity(user, sessionId, socket.id);
         if (!identity) {
           callback({ error: "Authentication error: Invalid token payload" });
           return;
@@ -51,12 +48,12 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
           callback({ error: "Session mismatch" });
           return;
         }
-        const { userKey, userId, displayName } = identity;
-        const hasDisplayNameOverride = Boolean(requestedDisplayName);
-        const isGhost = Boolean(data?.ghost) && Boolean(isAdmin);
-        context.currentUserKey = userKey;
-
-        let room = state.rooms.get(roomId);
+        const { userKey, userId } = identity;
+        const isHostForExistingRoom =
+          hostRequested && clientPolicy.allowHostJoin;
+        const roomChannelId = getRoomChannelId(clientId, roomId);
+        let room = state.rooms.get(roomChannelId);
+        let createdRoom = false;
 
         if (!room) {
           if (state.isDraining) {
@@ -65,27 +62,38 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
             });
             return;
           }
-          if (!isAdmin && !config.allowNonAdminRoomCreation) {
-            callback({ error: "This meeting hasn't started." });
+          if (!hostRequested && !clientPolicy.allowNonHostRoomCreation) {
+            callback({ error: "No room found." });
             return;
           }
-          room = await getOrCreateRoom(state, roomId);
+          room = await getOrCreateRoom(state, clientId, roomId);
+          createdRoom = true;
         } else {
           if (room.getClient(userId)) {
             Logger.warn(`User ${userId} re-joining room ${roomId}`);
             room.removeClient(userId);
           }
 
-          if (isAdmin && room.cleanupTimer) {
-            Logger.info(`Admin returning to room ${roomId}, cleanup cancelled.`);
+          if (isHostForExistingRoom && room.cleanupTimer) {
+            Logger.info(`Host returning to room ${roomId}, cleanup cancelled.`);
             room.stopCleanupTimer();
           }
         }
 
-        if (!isAdmin && !room.isAllowed(userKey)) {
+        const isHost = createdRoom
+          ? true
+          : isHostForExistingRoom;
+        const requestedDisplayName = isHost ? displayNameCandidate : "";
+        const displayName = requestedDisplayName || identity.displayName;
+        const hasDisplayNameOverride = Boolean(requestedDisplayName);
+        const isGhost = Boolean(data?.ghost) && Boolean(isHost);
+        context.currentUserKey = userKey;
+
+        if (clientPolicy.useWaitingRoom && !isHost && !room.isAllowed(userKey)) {
           Logger.info(`User ${userKey} added to waiting room ${roomId}`);
           room.addPendingClient(userKey, userId, socket, displayName);
           context.pendingRoomId = roomId;
+          context.pendingRoomChannelId = roomChannelId;
           context.pendingUserKey = userKey;
 
           if (!room.hasActiveAdmin()) {
@@ -114,7 +122,7 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
 
         if (
           context.currentRoom &&
-          context.currentRoom.id !== roomId &&
+          context.currentRoom.channelId !== roomChannelId &&
           context.currentClient
         ) {
           Logger.info(
@@ -130,12 +138,12 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
             });
           } else {
             socket
-              .to(context.currentRoom.id)
+              .to(context.currentRoom.channelId)
               .emit("userLeft", { userId: context.currentClient.id });
           }
 
-          socket.leave(context.currentRoom.id);
-          cleanupRoom(state, context.currentRoom.id);
+          socket.leave(context.currentRoom.channelId);
+          cleanupRoom(state, context.currentRoom.channelId);
 
           context.currentRoom = null;
           context.currentClient = null;
@@ -143,9 +151,10 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
 
         context.currentRoom = room;
         context.pendingRoomId = null;
+        context.pendingRoomChannelId = null;
         context.pendingUserKey = null;
 
-        if (isAdmin) {
+        if (isHost) {
           context.currentClient = new Admin({ id: userId, socket, isGhost });
         } else {
           context.currentClient = new Client({ id: userId, socket, isGhost });
@@ -156,7 +165,7 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
         });
         context.currentRoom.addClient(context.currentClient);
 
-        socket.join(roomId);
+        socket.join(roomChannelId);
 
         if (context.currentClient instanceof Admin) {
           const pendingUsers = Array.from(
@@ -190,7 +199,7 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
             });
           }
         } else {
-          socket.to(roomId).emit("userJoined", {
+          socket.to(roomChannelId).emit("userJoined", {
             userId,
             displayName: resolvedDisplayName,
           });
@@ -211,7 +220,7 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
 
         const newQuality = context.currentRoom.updateVideoQuality();
         if (newQuality) {
-          io.to(roomId).emit("setVideoQuality", { quality: newQuality });
+          io.to(roomChannelId).emit("setVideoQuality", { quality: newQuality });
         } else if (context.currentRoom.currentQuality === "low") {
           socket.emit("setVideoQuality", { quality: "low" });
         }
@@ -220,7 +229,7 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
 
         Logger.debug(
           `User ${userId} joined room ${roomId} as ${
-            isAdmin ? "Admin" : "Client"
+            isHost ? "Host" : "Client"
           }`,
         );
 

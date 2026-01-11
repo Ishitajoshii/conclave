@@ -5,11 +5,16 @@ import getWorker from "../utilities/getWorker.js";
 import { Logger } from "../utilities/loggers.js";
 import type { SfuState } from "./state.js";
 
+export const getRoomChannelId = (clientId: string, roomId: string): string =>
+  `${clientId}:${roomId}`;
+
 export const getOrCreateRoom = async (
   state: SfuState,
+  clientId: string,
   roomId: string,
 ): Promise<Room> => {
-  let room = state.rooms.get(roomId);
+  const channelId = getRoomChannelId(clientId, roomId);
+  let room = state.rooms.get(channelId);
   if (room) {
     return room;
   }
@@ -20,18 +25,18 @@ export const getOrCreateRoom = async (
     mediaCodecs: config.routerMediaCodecs as any,
   });
 
-  room = new Room({ id: roomId, router });
-  state.rooms.set(roomId, room);
-  Logger.success(`Created room: ${roomId}`);
+  room = new Room({ id: roomId, router, clientId });
+  state.rooms.set(channelId, room);
+  Logger.success(`Created room: ${roomId} (${clientId})`);
 
   return room;
 };
 
-export const cleanupRoom = (state: SfuState, roomId: string): void => {
-  const room = state.rooms.get(roomId);
+export const cleanupRoom = (state: SfuState, channelId: string): void => {
+  const room = state.rooms.get(channelId);
   if (room && room.isEmpty()) {
     room.close();
-    state.rooms.delete(roomId);
-    Logger.info(`Closed empty room: ${roomId}`);
+    state.rooms.delete(channelId);
+    Logger.info(`Closed empty room: ${room.id} (${room.clientId})`);
   }
 };

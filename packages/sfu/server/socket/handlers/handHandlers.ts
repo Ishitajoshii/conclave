@@ -29,7 +29,7 @@ export const registerHandHandlers = (context: ConnectionContext): void => {
           timestamp: Date.now(),
         };
 
-        io.to(context.currentRoom.id).emit("handRaised", notification);
+        io.to(context.currentRoom.channelId).emit("handRaised", notification);
         callback({ success: true });
       } catch (error) {
         callback({ error: (error as Error).message });

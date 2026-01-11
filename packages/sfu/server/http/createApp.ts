@@ -1,6 +1,6 @@
 import cors from "cors";
 import express from "express";
-import type { Request } from "express";
+import type { Express, Request } from "express";
 import { config as defaultConfig } from "../../config/config.js";
 import { Logger } from "../../utilities/loggers.js";
 import type { SfuState } from "../state.js";
@@ -18,7 +18,7 @@ const hasValidSecret = (req: Request, secret: string): boolean => {
 export const createSfuApp = ({
   state,
   config = defaultConfig,
-}: CreateSfuAppOptions) => {
+}: CreateSfuAppOptions): Express => {
   const app = express();
   app.use(cors());
   app.use(express.json());
@@ -52,10 +52,13 @@ export const createSfuApp = ({
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const roomDetails = Array.from(state.rooms.values()).map((room) => ({
-      id: room.id,
-      clients: room.clientCount,
-    }));
+    const clientId = req.header("x-sfu-client") || "default";
+    const roomDetails = Array.from(state.rooms.values())
+      .filter((room) => room.clientId === clientId)
+      .map((room) => ({
+        id: room.id,
+        clients: room.clientCount,
+      }));
 
     return res.json({ rooms: roomDetails });
   });

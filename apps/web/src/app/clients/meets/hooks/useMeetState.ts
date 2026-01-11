@@ -11,7 +11,7 @@ interface UseMeetStateOptions {
 export function useMeetState({ initialRoomId }: UseMeetStateOptions) {
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("disconnected");
-  const [roomId, setRoomId] = useState(initialRoomId || "default-room");
+  const [roomId, setRoomId] = useState(initialRoomId ?? "default-room");
   const [isMuted, setIsMuted] = useState(true);
   const [isCameraOff, setIsCameraOff] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);

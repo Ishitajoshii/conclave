@@ -28,7 +28,7 @@ export const registerAdminHandlers = (
     if (!context.currentRoom) return;
     for (const client of context.currentRoom.clients.values()) {
       if (client.removeProducerById(producerId)) {
-        socket.to(context.currentRoom.id).emit("producerClosed", {
+        socket.to(context.currentRoom.channelId).emit("producerClosed", {
           producerId,
           producerUserId: client.id,
         });
@@ -49,7 +49,7 @@ export const registerAdminHandlers = (
       const audioProducer = client.getProducer("audio");
       if (audioProducer) {
         if (client.removeProducerById(audioProducer.id)) {
-          socket.to(context.currentRoom.id).emit("producerClosed", {
+          socket.to(context.currentRoom.channelId).emit("producerClosed", {
             producerId: audioProducer.id,
             producerUserId: client.id,
           });
@@ -70,7 +70,7 @@ export const registerAdminHandlers = (
       const videoProducer = client.getProducer("video");
       if (videoProducer) {
         if (client.removeProducerById(videoProducer.id)) {
-          socket.to(context.currentRoom.id).emit("producerClosed", {
+          socket.to(context.currentRoom.channelId).emit("producerClosed", {
             producerId: videoProducer.id,
             producerUserId: client.id,
           });
@@ -82,10 +82,16 @@ export const registerAdminHandlers = (
   });
 
   socket.on("getRooms", (cb) => {
-    const roomList = Array.from(state.rooms.values()).map((room) => ({
-      id: room.id,
-      userCount: room.clientCount,
-    }));
+    const clientId =
+      typeof (socket as any).user?.clientId === "string"
+        ? (socket as any).user.clientId
+        : "default";
+    const roomList = Array.from(state.rooms.values())
+      .filter((room) => room.clientId === clientId)
+      .map((room) => ({
+        id: room.id,
+        userCount: room.clientCount,
+      }));
     cb({ rooms: roomList });
   });
 

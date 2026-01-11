@@ -22,7 +22,6 @@ import { useMeetRefs } from "./meets/hooks/useMeetRefs";
 import { useMeetRooms } from "./meets/hooks/useMeetRooms";
 import { useMeetSocket } from "./meets/hooks/useMeetSocket";
 import { useMeetState } from "./meets/hooks/useMeetState";
-import { ADMIN_EMAILS } from "../../../../../../src/lib/admin-config";
 import type { ParticipantsPanelGetRooms } from "./meets/components/ParticipantsPanel";
 
 const roboto = Roboto({
@@ -38,13 +37,22 @@ const roboto = Roboto({
 
 export type MeetsClientProps = {
   initialRoomId?: string;
+  enableRoomRouting?: boolean;
+  allowGhostMode?: boolean;
   user?: {
     id?: string;
     email?: string | null;
     name?: string | null;
   };
   isAdmin?: boolean;
-  getJoinInfo: (roomId: string, sessionId: string) => Promise<{
+  getJoinInfo: (
+    roomId: string,
+    sessionId: string,
+    options?: {
+      user?: { id?: string; email?: string | null; name?: string | null };
+      isHost?: boolean;
+    }
+  ) => Promise<{
     token: string;
     sfuUrl: string;
   }>;
@@ -55,6 +63,8 @@ export type MeetsClientProps = {
 
 export default function MeetsClient({
   initialRoomId,
+  enableRoomRouting = false,
+  allowGhostMode = true,
   user,
   isAdmin = false,
   getJoinInfo,
@@ -65,13 +75,6 @@ export default function MeetsClient({
   const [currentUser, setCurrentUser] = useState(user);
   const [currentIsAdmin, setCurrentIsAdmin] = useState(isAdmin);
 
-  useEffect(() => {
-    if (currentUser?.email && ADMIN_EMAILS.includes(currentUser.email)) {
-      setCurrentIsAdmin(true);
-    } else if (currentUser && !currentUser.email?.includes('guest')) {
-      setCurrentIsAdmin(false);
-    }
-  }, [currentUser]);
   const refs = useMeetRefs();
   const {
     connectionState,
@@ -110,6 +113,17 @@ export default function MeetsClient({
     setHasSeenTips,
   } = useMeetState({ initialRoomId });
 
+  useEffect(() => {
+    if (!enableRoomRouting) return;
+    if (roomId.trim().length > 0) return;
+    if (typeof window === "undefined") return;
+    const path = window.location.pathname.replace(/^\/+/, "");
+    if (!path) return;
+    const decoded = decodeURIComponent(path);
+    if (!decoded || decoded === "undefined" || decoded === "null") return;
+    setRoomId(decoded);
+  }, [enableRoomRouting, roomId, setRoomId]);
+
   const {
     videoQuality,
     setVideoQuality,
@@ -124,7 +138,7 @@ export default function MeetsClient({
   } = useMeetMediaSettings({ videoQualityRef: refs.videoQualityRef });
 
   const isAdminFlag = Boolean(currentIsAdmin);
-  const ghostEnabled = isAdminFlag && isGhostMode;
+  const ghostEnabled = allowGhostMode && isAdminFlag && isGhostMode;
 
   const userEmail = currentUser?.name || currentUser?.email || currentUser?.id || "guest";
   const userKey = currentUser?.email || currentUser?.id || "guest";
@@ -238,6 +252,7 @@ export default function MeetsClient({
     roomId,
     setRoomId,
     isAdmin: isAdminFlag,
+    user: currentUser,
     userId,
     getJoinInfo,
     ghostEnabled,
@@ -398,15 +413,17 @@ export default function MeetsClient({
           onDismiss={() => setMeetError(null)}
         />
       )}
-      <MeetsMainContent
-        isJoined={isJoined}
-        connectionState={connectionState}
-        isLoading={isLoading}
-        roomId={roomId}
-        setRoomId={setRoomId}
-        joinRoom={joinRoom}
-        joinRoomById={joinRoomById}
-        user={currentUser}
+    <MeetsMainContent
+      isJoined={isJoined}
+      connectionState={connectionState}
+      isLoading={isLoading}
+      roomId={roomId}
+      setRoomId={setRoomId}
+      joinRoom={joinRoom}
+      joinRoomById={joinRoomById}
+      enableRoomRouting={enableRoomRouting}
+      allowGhostMode={allowGhostMode}
+      user={currentUser}
         userEmail={userEmail}
         isAdmin={isAdminFlag}
         showPermissionHint={showPermissionHint}

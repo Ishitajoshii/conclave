@@ -12,9 +12,7 @@ import {
   Plus,
   ArrowRight,
   RefreshCw,
-  Settings,
 } from "lucide-react";
-import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { signIn, useSession } from "@/lib/auth-client";
 import type { RoomInfo } from "@/lib/sfu-types";
@@ -34,6 +32,8 @@ interface JoinScreenProps {
   userEmail: string;
   connectionState: ConnectionState;
   isAdmin: boolean;
+  enableRoomRouting: boolean;
+  allowGhostMode: boolean;
   showPermissionHint: boolean;
   rooms: RoomInfo[];
   roomsStatus: "idle" | "loading" | "error";
@@ -56,6 +56,8 @@ export default function JoinScreen({
   userEmail,
   connectionState,
   isAdmin,
+  enableRoomRouting,
+  allowGhostMode,
   showPermissionHint,
   rooms,
   roomsStatus,
@@ -67,12 +69,18 @@ export default function JoinScreen({
   onUserChange,
   onIsAdminChange,
 }: JoinScreenProps) {
-  const canJoin = roomId.trim().length > 0;
+  const normalizedRoomId =
+    roomId === "undefined" || roomId === "null" ? "" : roomId;
+  const canJoin = normalizedRoomId.trim().length > 0;
   const videoRef = useRef<HTMLVideoElement>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [isCameraOn, setIsCameraOn] = useState(true);
-  const [isMicOn, setIsMicOn] = useState(true);
-  const [activeTab, setActiveTab] = useState<"new" | "join">("new");
+  const [isCameraOn, setIsCameraOn] = useState(false); // Start with camera off
+  const [isMicOn, setIsMicOn] = useState(false); // Start with mic off
+  const isRoutedRoom =
+    enableRoomRouting && normalizedRoomId.trim().length > 0;
+  const [activeTab, setActiveTab] = useState<"new" | "join">(() =>
+    isRoutedRoom ? "join" : "new"
+  );
   const [phase, setPhase] = useState<"welcome" | "auth" | "join">(() => {
     if (user && user.id && !user.id.startsWith("guest-")) {
       return "join";
@@ -81,6 +89,9 @@ export default function JoinScreen({
   });
   const [guestName, setGuestName] = useState("");
   const [isSigningIn, setIsSigningIn] = useState(false);
+
+  const generateMeetingCode = () =>
+    Math.random().toString(36).slice(2, 6);
   
   const { data: session, isPending: isSessionLoading } = useSession();
   
@@ -110,44 +121,96 @@ export default function JoinScreen({
   }, [user]);
 
   useEffect(() => {
-    let stream: MediaStream | null = null;
-    const getMedia = async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        setLocalStream(stream);
-        if (videoRef.current) videoRef.current.srcObject = stream;
-      } catch (err) {
-        console.log("[JoinScreen] Camera access denied");
+    // Only capture media when in join phase
+    if (phase !== "join") {
+      // Stop any existing stream when leaving join phase
+      if (localStream) {
+        localStream.getTracks().forEach((t) => t.stop());
+        setLocalStream(null);
+      }
+      return;
+    }
+    
+    // Don't auto-capture - let user explicitly turn on camera/mic
+    return () => {
+      if (localStream) {
+        localStream.getTracks().forEach((t) => t.stop());
       }
     };
-    getMedia();
-    return () => {
-      if (stream) stream.getTracks().forEach((t) => t.stop());
-    };
-  }, []);
+  }, [phase]);
 
   useEffect(() => {
     if (videoRef.current && localStream) videoRef.current.srcObject = localStream;
   }, [localStream]);
 
-  const toggleCamera = () => {
-    if (localStream) {
+  const toggleCamera = async () => {
+    if (isCameraOn && localStream) {
+      // Turn off camera - stop the video track
       const track = localStream.getVideoTracks()[0];
-      if (track) { track.enabled = !track.enabled; setIsCameraOn(track.enabled); }
+      if (track) {
+        track.stop();
+        // Remove video track from stream
+        localStream.removeTrack(track);
+      }
+      setIsCameraOn(false);
+    } else {
+      // Turn on camera - acquire new video track
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack) {
+          if (localStream) {
+            localStream.addTrack(videoTrack);
+          } else {
+            setLocalStream(stream);
+          }
+          if (videoRef.current) {
+            videoRef.current.srcObject = localStream || stream;
+          }
+          setIsCameraOn(true);
+        }
+      } catch (err) {
+        console.log("[JoinScreen] Camera access denied");
+      }
     }
   };
 
-  const toggleMic = () => {
-    if (localStream) {
+  const toggleMic = async () => {
+    if (isMicOn && localStream) {
+      // Turn off mic - stop the audio track
       const track = localStream.getAudioTracks()[0];
-      if (track) { track.enabled = !track.enabled; setIsMicOn(track.enabled); }
+      if (track) {
+        track.stop();
+        localStream.removeTrack(track);
+      }
+      setIsMicOn(false);
+    } else {
+      // Turn on mic - acquire new audio track
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const audioTrack = stream.getAudioTracks()[0];
+        if (audioTrack) {
+          if (localStream) {
+            localStream.addTrack(audioTrack);
+          } else {
+            setLocalStream(stream);
+          }
+          setIsMicOn(true);
+        }
+      } catch (err) {
+        console.log("[JoinScreen] Microphone access denied");
+      }
     }
   };
 
   const handleCreateRoom = () => {
-    const id = `room-${Math.random().toString(36).substring(2, 8)}`;
+    onIsAdminChange(true);
+    const id = generateMeetingCode();
+    if (enableRoomRouting && typeof window !== "undefined") {
+      window.history.pushState(null, "", `/${id}`);
+    }
     onRoomIdChange(id);
-    onJoin();
+    onJoinRoom(id);
   };
 
   const handleGoogleSignIn = async () => {
@@ -174,6 +237,24 @@ export default function JoinScreen({
     onIsAdminChange(false);
     setPhase("join");
   };
+
+  useEffect(() => {
+    if (phase !== "join") return;
+    onIsAdminChange(activeTab === "new");
+  }, [activeTab, onIsAdminChange, phase]);
+
+  useEffect(() => {
+    if (!isRoutedRoom) return;
+    if (activeTab !== "join") {
+      setActiveTab("join");
+    }
+    onIsAdminChange(false);
+  }, [activeTab, isRoutedRoom, onIsAdminChange]);
+
+  useEffect(() => {
+    if (normalizedRoomId === roomId) return;
+    onRoomIdChange(normalizedRoomId);
+  }, [normalizedRoomId, onRoomIdChange, roomId]);
 
   return (
     <div className="flex-1 flex flex-col relative overflow-hidden">
@@ -368,26 +449,34 @@ export default function JoinScreen({
           </div>
 
           <div className="w-80 flex flex-col">
-            <div className="flex mb-6 bg-[#1a1a1a] rounded-lg p-1">
-              <button
-                onClick={() => setActiveTab("new")}
-                className={`flex-1 py-2.5 text-xs uppercase tracking-wider rounded-md transition-all ${activeTab === "new" ? "bg-[#F95F4A] text-white" : "text-[#FEFCD9]/50 hover:text-[#FEFCD9]"}`}
-                style={{ fontFamily: "'PolySans Mono', monospace" }}
-              >
-                New Meeting
-              </button>
-              <button
-                onClick={() => setActiveTab("join")}
-                className={`flex-1 py-2.5 text-xs uppercase tracking-wider rounded-md transition-all ${activeTab === "join" ? "bg-[#F95F4A] text-white" : "text-[#FEFCD9]/50 hover:text-[#FEFCD9]"}`}
-                style={{ fontFamily: "'PolySans Mono', monospace" }}
-              >
-                Join
-              </button>
-            </div>
+            {!isRoutedRoom && (
+              <div className="flex mb-6 bg-[#1a1a1a] rounded-lg p-1">
+                <button
+                  onClick={() => {
+                    setActiveTab("new");
+                    onIsAdminChange(true);
+                  }}
+                  className={`flex-1 py-2.5 text-xs uppercase tracking-wider rounded-md transition-all ${activeTab === "new" ? "bg-[#F95F4A] text-white" : "text-[#FEFCD9]/50 hover:text-[#FEFCD9]"}`}
+                  style={{ fontFamily: "'PolySans Mono', monospace" }}
+                >
+                  New Meeting
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab("join");
+                    onIsAdminChange(false);
+                  }}
+                  className={`flex-1 py-2.5 text-xs uppercase tracking-wider rounded-md transition-all ${activeTab === "join" ? "bg-[#F95F4A] text-white" : "text-[#FEFCD9]/50 hover:text-[#FEFCD9]"}`}
+                  style={{ fontFamily: "'PolySans Mono', monospace" }}
+                >
+                  Join
+                </button>
+              </div>
+            )}
 
-            {activeTab === "new" ? (
+            {activeTab === "new" && !isRoutedRoom ? (
               <div className="space-y-4">
-                {isAdmin && (
+                {isAdmin && allowGhostMode && (
                   <>
                     <div>
                       <label className="text-[10px] uppercase tracking-wider text-[#FEFCD9]/40 mb-1.5 block" style={{ fontFamily: "'PolySans Mono', monospace" }}>
@@ -403,7 +492,7 @@ export default function JoinScreen({
                         className="w-full px-3 py-2.5 bg-[#1a1a1a] border border-[#FEFCD9]/10 rounded-lg text-sm text-[#FEFCD9] placeholder:text-[#FEFCD9]/30 focus:border-[#F95F4A]/50 focus:outline-none"
                       />
                     </div>
-                    <button
+                    {/* <button
                       onClick={() => onGhostModeChange(!isGhostMode)}
                       disabled={isLoading}
                       className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-all text-sm ${isGhostMode ? "bg-[#FF007A]/15 border border-[#FF007A]/30" : "bg-[#1a1a1a] border border-[#FEFCD9]/10"}`}
@@ -413,7 +502,7 @@ export default function JoinScreen({
                       <div className={`w-8 h-4.5 rounded-full relative ${isGhostMode ? "bg-[#FF007A]" : "bg-[#FEFCD9]/15"}`}>
                         <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-all ${isGhostMode ? "left-4" : "left-0.5"}`} />
                       </div>
-                    </button>
+                    </button> */}
                   </>
                 )}
                 <button
@@ -433,15 +522,16 @@ export default function JoinScreen({
                   </label>
                   <input
                     type="text"
-                    value={roomId}
+                    value={normalizedRoomId}
                     onChange={(e) => onRoomIdChange(e.target.value)}
                     placeholder="Enter code"
                     disabled={isLoading}
+                    readOnly={isRoutedRoom}
                     className="w-full px-3 py-2.5 bg-[#1a1a1a] border border-[#FEFCD9]/10 rounded-lg text-sm text-[#FEFCD9] placeholder:text-[#FEFCD9]/30 focus:border-[#F95F4A]/50 focus:outline-none"
                     onKeyDown={(e) => { if (e.key === "Enter" && canJoin) onJoin(); }}
                   />
                 </div>
-                {isAdmin && (
+                {isAdmin && allowGhostMode && (
                   <div>
                     <label className="text-[10px] uppercase tracking-wider text-[#FEFCD9]/40 mb-1.5 block" style={{ fontFamily: "'PolySans Mono', monospace" }}>
                       Display Name
