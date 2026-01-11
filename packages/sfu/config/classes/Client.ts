@@ -1,0 +1,169 @@
+import type { Socket } from "socket.io";
+import type {
+  WebRtcTransport,
+  Producer,
+  Consumer,
+  MediaKind,
+} from "mediasoup/types";
+
+export interface ClientOptions {
+  id: string;
+  socket: Socket;
+  isGhost?: boolean;
+}
+
+export type ProducerType = "webcam" | "screen";
+
+export type ProducerKey = `${MediaKind}-${ProducerType}`;
+
+export function createProducerKey(
+  kind: MediaKind,
+  type: ProducerType,
+): ProducerKey {
+  return `${kind}-${type}`;
+}
+
+export class Client {
+  public readonly id: string;
+  public readonly socket: Socket;
+  public readonly isGhost: boolean;
+
+  public producerTransport: WebRtcTransport | null = null;
+  public consumerTransport: WebRtcTransport | null = null;
+
+  public producers: Map<ProducerKey, Producer> = new Map();
+
+  public consumers: Map<string, Consumer> = new Map();
+
+  public isMuted: boolean = false;
+  public isCameraOff: boolean = false;
+
+  constructor(options: ClientOptions) {
+    this.id = options.id;
+    this.socket = options.socket;
+    this.isGhost = options.isGhost ?? false;
+  }
+
+  addProducer(producer: Producer): void {
+    const type = (producer.appData.type as ProducerType) || "webcam";
+    const key = createProducerKey(producer.kind, type);
+
+    this.producers.set(key, producer);
+
+    const cleanup = () => {
+      this.producers.delete(key);
+    };
+
+    producer.on("transportclose", cleanup);
+    producer.observer.on("close", cleanup);
+  }
+
+  addConsumer(consumer: Consumer): void {
+    this.consumers.set(consumer.producerId, consumer);
+
+    const cleanup = () => {
+      this.consumers.delete(consumer.producerId);
+    };
+
+    consumer.on("transportclose", cleanup);
+    consumer.on("producerclose", cleanup);
+    consumer.observer.on("close", cleanup);
+  }
+
+  getProducer(
+    kind: MediaKind,
+    type: ProducerType = "webcam",
+  ): Producer | undefined {
+    return this.producers.get(createProducerKey(kind, type));
+  }
+
+  getConsumer(producerId: string): Consumer | undefined {
+    return this.consumers.get(producerId);
+  }
+
+  async toggleMute(paused: boolean): Promise<void> {
+    const audioProducer = this.getProducer("audio", "webcam");
+    if (audioProducer) {
+      if (paused) {
+        await audioProducer.pause();
+      } else {
+        await audioProducer.resume();
+      }
+      this.isMuted = paused;
+    }
+  }
+
+  async toggleCamera(paused: boolean): Promise<void> {
+    const videoProducer = this.getProducer("video", "webcam");
+    if (videoProducer) {
+      if (paused) {
+        await videoProducer.pause();
+      } else {
+        await videoProducer.resume();
+      }
+      this.isCameraOff = paused;
+    }
+  }
+
+  close(): void {
+    for (const consumer of this.consumers.values()) {
+      consumer.close();
+    }
+    this.consumers.clear();
+
+    for (const producer of this.producers.values()) {
+      producer.close();
+    }
+    this.producers.clear();
+
+    if (this.producerTransport) {
+      this.producerTransport.close();
+      this.producerTransport = null;
+    }
+
+    if (this.consumerTransport) {
+      this.consumerTransport.close();
+      this.consumerTransport = null;
+    }
+  }
+
+  getProducerInfos(): {
+    producerId: string;
+    kind: MediaKind;
+    type: ProducerType;
+    paused: boolean;
+  }[] {
+    const infos: {
+      producerId: string;
+      kind: MediaKind;
+      type: ProducerType;
+      paused: boolean;
+    }[] = [];
+    for (const [key, producer] of this.producers) {
+      const [kind, type] = key.split("-") as [MediaKind, ProducerType];
+      infos.push({
+        producerId: producer.id,
+        kind,
+        type,
+        paused: producer.paused,
+      });
+    }
+    return infos;
+  }
+
+  removeProducerById(
+    producerId: string,
+  ): { kind: MediaKind; type: ProducerType } | null {
+    for (const [key, producer] of this.producers) {
+      if (producer.id === producerId) {
+        producer.close();
+        this.producers.delete(key);
+        const [kind, type] = key.split("-") as [MediaKind, ProducerType];
+        return { kind, type };
+      }
+    }
+    return null;
+  }
+}
+
+export default Client;

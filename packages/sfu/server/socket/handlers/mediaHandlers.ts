@@ -1,0 +1,294 @@
+import type {
+  ConsumeData,
+  ConsumeResponse,
+  ProduceData,
+  ProduceResponse,
+  ProducerInfo,
+  ToggleMediaData,
+} from "../../../types.js";
+import { Logger } from "../../../utilities/loggers.js";
+import type { ConnectionContext } from "../context.js";
+
+export const registerMediaHandlers = (context: ConnectionContext): void => {
+  const { socket, state } = context;
+
+  socket.on(
+    "produce",
+    async (
+      data: ProduceData,
+      callback: (response: ProduceResponse | { error: string }) => void,
+    ) => {
+      try {
+        if (!context.currentRoom || !context.currentClient?.producerTransport) {
+          callback({ error: "Not ready to produce" });
+          return;
+        }
+        if (context.currentClient.isGhost) {
+          callback({ error: "Ghost mode cannot produce media" });
+          return;
+        }
+
+        const { kind, rtpParameters, appData } = data;
+        const type = (appData.type as "webcam" | "screen") || "webcam";
+        const paused = !!appData.paused;
+
+        if (type === "screen") {
+          const existingScreenShare = context.currentRoom.screenShareProducerId;
+          if (existingScreenShare) {
+            callback({ error: "Screen is already being shared" });
+            return;
+          }
+        }
+
+        const producer = await context.currentClient.producerTransport.produce({
+          kind,
+          rtpParameters,
+          appData: { type },
+          paused,
+        });
+
+        if (type === "screen") {
+          context.currentRoom.setScreenShareProducer(producer.id);
+        }
+
+        context.currentClient.addProducer(producer);
+
+        socket.to(context.currentRoom.id).emit("newProducer", {
+          producerId: producer.id,
+          producerUserId: context.currentClient.id,
+          kind,
+          type,
+          paused: producer.paused,
+        });
+
+        const roomId = context.currentRoom.id;
+        const clientId = context.currentClient.id;
+
+        let producerClosed = false;
+        const notifyProducerClosed = () => {
+          if (producerClosed) return;
+          producerClosed = true;
+
+          Logger.info(`Producer closed: ${producer.id}`);
+          const room = state.rooms.get(roomId);
+          if (!room) return;
+
+          if (type === "screen") {
+            room.clearScreenShareProducer(producer.id);
+          }
+
+          socket.to(roomId).emit("producerClosed", {
+            producerId: producer.id,
+            producerUserId: clientId,
+          });
+        };
+
+        producer.on("transportclose", notifyProducerClosed);
+        producer.observer.on("close", notifyProducerClosed);
+
+        Logger.info(
+          `User ${context.currentClient.id} started producing ${kind} (${type}): ${producer.id}`,
+        );
+
+        callback({ producerId: producer.id });
+      } catch (error) {
+        Logger.error("Error producing:", error);
+        callback({ error: (error as Error).message });
+      }
+    },
+  );
+
+  socket.on(
+    "consume",
+    async (
+      data: ConsumeData,
+      callback: (response: ConsumeResponse | { error: string }) => void,
+    ) => {
+      try {
+        if (!context.currentRoom || !context.currentClient?.consumerTransport) {
+          callback({ error: "Not ready to consume" });
+          return;
+        }
+
+        const { producerId, rtpCapabilities } = data;
+
+        if (!context.currentRoom.canConsume(producerId, rtpCapabilities)) {
+          callback({ error: "Cannot consume this producer" });
+          return;
+        }
+
+        const consumer = await context.currentClient.consumerTransport.consume({
+          producerId,
+          rtpCapabilities,
+          paused: false,
+        });
+
+        context.currentClient.addConsumer(consumer);
+
+        consumer.on("transportclose", () => {
+          Logger.info(`Consumer transport closed: ${consumer.id}`);
+        });
+
+        consumer.on("producerclose", () => {
+          Logger.info(`Producer closed for consumer: ${consumer.id}`);
+          socket.emit("producerClosed", { producerId });
+        });
+
+        callback({
+          id: consumer.id,
+          producerId: consumer.producerId,
+          kind: consumer.kind,
+          rtpParameters: consumer.rtpParameters,
+        });
+      } catch (error) {
+        Logger.error("Error consuming:", error);
+        callback({ error: (error as Error).message });
+      }
+    },
+  );
+
+  socket.on(
+    "getProducers",
+    (
+      callback: (
+        response: { producers: ProducerInfo[] } | { error: string },
+      ) => void,
+    ) => {
+      try {
+        if (!context.currentRoom || !context.currentClient) {
+          callback({ error: "Not in a room" });
+          return;
+        }
+
+        const producers = context.currentRoom.getAllProducers(
+          context.currentClient.id,
+        );
+        callback({ producers });
+      } catch (error) {
+        callback({ error: (error as Error).message });
+      }
+    },
+  );
+
+  socket.on(
+    "resumeConsumer",
+    async (
+      data: { consumerId: string },
+      callback: (response: { success: boolean } | { error: string }) => void,
+    ) => {
+      try {
+        if (!context.currentClient) {
+          callback({ error: "Not in a room" });
+          return;
+        }
+
+        for (const consumer of context.currentClient.consumers.values()) {
+          if (consumer.id === data.consumerId) {
+            await consumer.resume();
+            callback({ success: true });
+            return;
+          }
+        }
+
+        callback({ error: "Consumer not found" });
+      } catch (error) {
+        callback({ error: (error as Error).message });
+      }
+    },
+  );
+
+  socket.on(
+    "toggleMute",
+    async (
+      data: ToggleMediaData,
+      callback: (response: { success: boolean } | { error: string }) => void,
+    ) => {
+      try {
+        if (!context.currentClient || !context.currentRoom) {
+          callback({ error: "Not in a room" });
+          return;
+        }
+        if (context.currentClient.isGhost) {
+          callback({ error: "Ghost mode cannot unmute" });
+          return;
+        }
+
+        await context.currentClient.toggleMute(data.paused);
+
+        socket.to(context.currentRoom.id).emit("participantMuted", {
+          userId: context.currentClient.id,
+          muted: data.paused,
+        });
+
+        callback({ success: true });
+      } catch (error) {
+        callback({ error: (error as Error).message });
+      }
+    },
+  );
+
+  socket.on(
+    "toggleCamera",
+    async (
+      data: ToggleMediaData,
+      callback: (response: { success: boolean } | { error: string }) => void,
+    ) => {
+      try {
+        if (!context.currentClient || !context.currentRoom) {
+          callback({ error: "Not in a room" });
+          return;
+        }
+        if (context.currentClient.isGhost) {
+          callback({ error: "Ghost mode cannot enable camera" });
+          return;
+        }
+
+        await context.currentClient.toggleCamera(data.paused);
+
+        socket.to(context.currentRoom.id).emit("participantCameraOff", {
+          userId: context.currentClient.id,
+          cameraOff: data.paused,
+        });
+
+        callback({ success: true });
+      } catch (error) {
+        callback({ error: (error as Error).message });
+      }
+    },
+  );
+
+  socket.on(
+    "closeProducer",
+    async (
+      data: { producerId: string },
+      callback: (response: { success: boolean } | { error: string }) => void,
+    ) => {
+      try {
+        if (!context.currentClient || !context.currentRoom) {
+          callback({ error: "Not in a room" });
+          return;
+        }
+        const removed = context.currentClient.removeProducerById(
+          data.producerId,
+        );
+        if (removed) {
+          if (removed.type === "screen") {
+            context.currentRoom.clearScreenShareProducer(data.producerId);
+          }
+
+          socket.to(context.currentRoom.id).emit("producerClosed", {
+            producerId: data.producerId,
+            producerUserId: context.currentClient.id,
+          });
+
+          callback({ success: true });
+          return;
+        }
+
+        callback({ error: "Producer not found" });
+      } catch (error) {
+        callback({ error: (error as Error).message });
+      }
+    },
+  );
+};

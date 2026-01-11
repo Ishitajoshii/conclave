@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+@keyframes meets-participant-join {
+  0% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes meets-participant-leave {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+.animate-participant-join {
+  animation: meets-participant-join 220ms ease-out;
+}
+
+.animate-participant-leave {
+  animation: meets-participant-leave 220ms ease-in;
+}

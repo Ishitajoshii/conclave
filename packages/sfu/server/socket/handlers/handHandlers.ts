@@ -1,0 +1,39 @@
+import type { HandRaisedNotification, SetHandRaisedData } from "../../../types.js";
+import type { ConnectionContext } from "../context.js";
+
+export const registerHandHandlers = (context: ConnectionContext): void => {
+  const { socket, io } = context;
+
+  socket.on(
+    "setHandRaised",
+    (
+      data: SetHandRaisedData,
+      callback: (response: { success: boolean } | { error: string }) => void,
+    ) => {
+      try {
+        if (!context.currentClient || !context.currentRoom) {
+          callback({ error: "Not in a room" });
+          return;
+        }
+        if (context.currentClient.isGhost) {
+          callback({ error: "Ghost mode cannot raise a hand" });
+          return;
+        }
+
+        const raised = Boolean(data?.raised);
+        context.currentRoom.setHandRaised(context.currentClient.id, raised);
+
+        const notification: HandRaisedNotification = {
+          userId: context.currentClient.id,
+          raised,
+          timestamp: Date.now(),
+        };
+
+        io.to(context.currentRoom.id).emit("handRaised", notification);
+        callback({ success: true });
+      } catch (error) {
+        callback({ error: (error as Error).message });
+      }
+    },
+  );
+};

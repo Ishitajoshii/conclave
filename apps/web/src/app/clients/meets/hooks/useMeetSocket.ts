@@ -1,0 +1,1438 @@
+"use client";
+
+import { useCallback, useEffect } from "react";
+import { io, type Socket } from "socket.io-client";
+import { Device } from "mediasoup-client";
+import {
+  MAX_RECONNECT_ATTEMPTS,
+  MEETS_ICE_SERVERS,
+  RECONNECT_DELAY_MS,
+  SOCKET_TIMEOUT_MS,
+} from "../constants";
+import type {
+  ChatMessage,
+  ConnectionState,
+  ConsumeResponse,
+  HandRaisedNotification,
+  HandRaisedSnapshot,
+  JoinRoomResponse,
+  MeetError,
+  ProducerInfo,
+  ProducerType,
+  ReactionNotification,
+  ReactionPayload,
+  TransportResponse,
+  VideoQuality,
+} from "../types";
+import type { ParticipantAction } from "../participant-reducer";
+import { createMeetError, normalizeDisplayName } from "../utils";
+import type { MeetRefs } from "./useMeetRefs";
+
+interface UseMeetSocketOptions {
+  refs: MeetRefs;
+  roomId: string;
+  setRoomId: (roomId: string) => void;
+  isAdmin: boolean;
+  userId: string;
+  getJoinInfo: (roomId: string, sessionId: string) => Promise<{
+    token: string;
+    sfuUrl: string;
+  }>;
+  ghostEnabled: boolean;
+  hasSeenTips: boolean;
+  setShowAdminTips: (value: boolean) => void;
+  displayNameInput: string;
+  localStream: MediaStream | null;
+  setLocalStream: React.Dispatch<React.SetStateAction<MediaStream | null>>;
+  dispatchParticipants: (action: ParticipantAction) => void;
+  setDisplayNames: React.Dispatch<React.SetStateAction<Map<string, string>>>;
+  setPendingUsers: React.Dispatch<React.SetStateAction<Map<string, string>>>;
+  setConnectionState: (state: ConnectionState) => void;
+  setMeetError: (error: MeetError | null) => void;
+  setWaitingMessage: (message: string | null) => void;
+  isMuted: boolean;
+  setIsMuted: (value: boolean) => void;
+  isCameraOff: boolean;
+  setIsCameraOff: (value: boolean) => void;
+  setIsScreenSharing: (value: boolean) => void;
+  setIsHandRaised: (value: boolean) => void;
+  setActiveScreenShareId: (value: string | null) => void;
+  setVideoQuality: (value: VideoQuality) => void;
+  updateVideoQualityRef: React.MutableRefObject<
+    (quality: VideoQuality) => Promise<void>
+  >;
+  requestMediaPermissions: () => Promise<MediaStream | null>;
+  stopLocalTrack: (track?: MediaStreamTrack | null) => void;
+  handleLocalTrackEnded: (kind: "audio" | "video", track: MediaStreamTrack) => void;
+  playNotificationSound: (type: "join" | "leave" | "waiting") => void;
+  primeAudioOutput: () => void;
+  addReaction: (reaction: ReactionPayload) => void;
+  clearReactions: () => void;
+  chat: {
+    setChatMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+    setChatOverlayMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+    setUnreadCount: React.Dispatch<React.SetStateAction<number>>;
+    isChatOpenRef: React.MutableRefObject<boolean>;
+  };
+}
+
+export function useMeetSocket({
+  refs,
+  roomId,
+  setRoomId,
+  isAdmin,
+  userId,
+  getJoinInfo,
+  ghostEnabled,
+  hasSeenTips,
+  setShowAdminTips,
+  displayNameInput,
+  localStream,
+  setLocalStream,
+  dispatchParticipants,
+  setDisplayNames,
+  setPendingUsers,
+  setConnectionState,
+  setMeetError,
+  setWaitingMessage,
+  isMuted,
+  setIsMuted,
+  isCameraOff,
+  setIsCameraOff,
+  setIsScreenSharing,
+  setIsHandRaised,
+  setActiveScreenShareId,
+  setVideoQuality,
+  updateVideoQualityRef,
+  requestMediaPermissions,
+  stopLocalTrack,
+  handleLocalTrackEnded,
+  playNotificationSound,
+  primeAudioOutput,
+  addReaction,
+  clearReactions,
+  chat,
+}: UseMeetSocketOptions) {
+  const {
+    socketRef,
+    deviceRef,
+    producerTransportRef,
+    consumerTransportRef,
+    audioProducerRef,
+    videoProducerRef,
+    screenProducerRef,
+    consumersRef,
+    producerMapRef,
+    pendingProducersRef,
+    leaveTimeoutsRef,
+    reconnectAttemptsRef,
+    reconnectInFlightRef,
+    intentionalDisconnectRef,
+    currentRoomIdRef,
+    handleRedirectRef,
+    handleReconnectRef,
+    shouldAutoJoinRef,
+    joinOptionsRef,
+    localStreamRef,
+    sessionIdRef,
+  } = refs;
+
+  const cleanupRoomResources = useCallback(
+    (options?: { resetRoomId?: boolean }) => {
+      const resetRoomId = options?.resetRoomId !== false;
+      console.log("[Meets] Cleaning up room resources...");
+
+      consumersRef.current.forEach((consumer) => {
+        try {
+          consumer.close();
+        } catch {}
+      });
+      consumersRef.current.clear();
+      producerMapRef.current.clear();
+      pendingProducersRef.current.clear();
+      leaveTimeoutsRef.current.forEach((timeoutId) => {
+        window.clearTimeout(timeoutId);
+      });
+      leaveTimeoutsRef.current.clear();
+      clearReactions();
+      setPendingUsers(new Map());
+      setDisplayNames(new Map());
+
+      try {
+        audioProducerRef.current?.close();
+      } catch {}
+      try {
+        videoProducerRef.current?.close();
+      } catch {}
+      try {
+        screenProducerRef.current?.close();
+      } catch {}
+      audioProducerRef.current = null;
+      videoProducerRef.current = null;
+      screenProducerRef.current = null;
+
+      try {
+        producerTransportRef.current?.close();
+      } catch {}
+      try {
+        consumerTransportRef.current?.close();
+      } catch {}
+      producerTransportRef.current = null;
+      consumerTransportRef.current = null;
+
+      dispatchParticipants({ type: "CLEAR_ALL" });
+      setIsScreenSharing(false);
+      setActiveScreenShareId(null);
+      setIsHandRaised(false);
+      if (resetRoomId) {
+        currentRoomIdRef.current = null;
+      }
+    },
+    [
+      audioProducerRef,
+      consumerTransportRef,
+      consumersRef,
+      currentRoomIdRef,
+      dispatchParticipants,
+      leaveTimeoutsRef,
+      pendingProducersRef,
+      producerMapRef,
+      producerTransportRef,
+      screenProducerRef,
+      setActiveScreenShareId,
+      setDisplayNames,
+      setIsHandRaised,
+      setIsScreenSharing,
+      setPendingUsers,
+      clearReactions,
+      videoProducerRef,
+    ]
+  );
+
+  const cleanup = useCallback(() => {
+    console.log("[Meets] Running full cleanup...");
+
+    intentionalDisconnectRef.current = true;
+    cleanupRoomResources();
+
+    localStream?.getTracks().forEach((track) => {
+      stopLocalTrack(track);
+    });
+
+    socketRef.current?.disconnect();
+    socketRef.current = null;
+    deviceRef.current = null;
+
+    setConnectionState("disconnected");
+    setLocalStream(null);
+    setWaitingMessage(null);
+    reconnectAttemptsRef.current = 0;
+  }, [
+    cleanupRoomResources,
+    intentionalDisconnectRef,
+    localStream,
+    reconnectAttemptsRef,
+    setConnectionState,
+    setLocalStream,
+    setWaitingMessage,
+    socketRef,
+    deviceRef,
+    stopLocalTrack,
+  ]);
+
+  const scheduleParticipantRemoval = useCallback(
+    (leftUserId: string) => {
+      const existingTimeout = leaveTimeoutsRef.current.get(leftUserId);
+      if (existingTimeout) {
+        window.clearTimeout(existingTimeout);
+      }
+      const timeoutId = window.setTimeout(() => {
+        leaveTimeoutsRef.current.delete(leftUserId);
+        dispatchParticipants({ type: "REMOVE_PARTICIPANT", userId: leftUserId });
+      }, 200);
+      leaveTimeoutsRef.current.set(leftUserId, timeoutId);
+    },
+    [dispatchParticipants, leaveTimeoutsRef]
+  );
+
+  const isRoomEvent = useCallback(
+    (eventRoomId?: string) => {
+      if (!eventRoomId) return true;
+      if (!currentRoomIdRef.current) return true;
+      return eventRoomId === currentRoomIdRef.current;
+    },
+    [currentRoomIdRef]
+  );
+
+  const handleProducerClosed = useCallback(
+    (producerId: string) => {
+      pendingProducersRef.current.delete(producerId);
+      const consumer = consumersRef.current.get(producerId);
+      if (consumer) {
+        try {
+          if (consumer.track) {
+            consumer.track.stop();
+          }
+          consumer.close();
+        } catch {}
+        consumersRef.current.delete(producerId);
+      }
+
+      const info = producerMapRef.current.get(producerId);
+      if (info) {
+        dispatchParticipants({
+          type: "UPDATE_STREAM",
+          userId: info.userId,
+          kind: info.kind,
+          streamType: info.type,
+          stream: null,
+          producerId: producerId,
+        });
+
+        if (info.kind === "video" && info.type === "webcam") {
+          dispatchParticipants({
+            type: "UPDATE_CAMERA_OFF",
+            userId: info.userId,
+            cameraOff: true,
+          });
+        } else if (info.kind === "audio") {
+          dispatchParticipants({
+            type: "UPDATE_MUTED",
+            userId: info.userId,
+            muted: true,
+          });
+        }
+
+        if (info.type === "screen") {
+          setActiveScreenShareId(null);
+        }
+
+        producerMapRef.current.delete(producerId);
+      }
+    },
+    [
+      consumersRef,
+      dispatchParticipants,
+      pendingProducersRef,
+      producerMapRef,
+      setActiveScreenShareId,
+    ]
+  );
+
+  const createProducerTransport = useCallback(
+    async (socket: Socket, device: Device): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        socket.emit(
+          "createProducerTransport",
+          (response: TransportResponse | { error: string }) => {
+            if ("error" in response) {
+              reject(new Error(response.error));
+              return;
+            }
+
+            const transport = device.createSendTransport({
+              ...response,
+              iceServers: MEETS_ICE_SERVERS.length
+                ? MEETS_ICE_SERVERS
+                : undefined,
+            });
+
+            transport.on("connect", ({ dtlsParameters }, callback, errback) => {
+              socket.emit(
+                "connectProducerTransport",
+                { transportId: transport.id, dtlsParameters },
+                (res: { success: boolean } | { error: string }) => {
+                  if ("error" in res) errback(new Error(res.error));
+                  else callback();
+                }
+              );
+            });
+
+            transport.on(
+              "produce",
+              ({ kind, rtpParameters, appData }, callback, errback) => {
+                socket.emit(
+                  "produce",
+                  { transportId: transport.id, kind, rtpParameters, appData },
+                  (res: { producerId: string } | { error: string }) => {
+                    if ("error" in res) errback(new Error(res.error));
+                    else callback({ id: res.producerId });
+                  }
+                );
+              }
+            );
+
+            transport.on("connectionstatechange", (state) => {
+              console.log("[Meets] Producer transport state:", state);
+              if (state === "failed" || state === "closed") {
+                setMeetError({
+                  code: "TRANSPORT_ERROR",
+                  message: "Producer transport failed",
+                  recoverable: true,
+                });
+              }
+            });
+
+            producerTransportRef.current = transport;
+            resolve();
+          }
+        );
+      });
+    },
+    [producerTransportRef, setMeetError]
+  );
+
+  const createConsumerTransport = useCallback(
+    async (socket: Socket, device: Device): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        socket.emit(
+          "createConsumerTransport",
+          (response: TransportResponse | { error: string }) => {
+            if ("error" in response) {
+              reject(new Error(response.error));
+              return;
+            }
+
+            const transport = device.createRecvTransport({
+              ...response,
+              iceServers: MEETS_ICE_SERVERS.length
+                ? MEETS_ICE_SERVERS
+                : undefined,
+            });
+
+            transport.on("connect", ({ dtlsParameters }, callback, errback) => {
+              socket.emit(
+                "connectConsumerTransport",
+                { transportId: transport.id, dtlsParameters },
+                (res: { success: boolean } | { error: string }) => {
+                  if ("error" in res) errback(new Error(res.error));
+                  else callback();
+                }
+              );
+            });
+
+            transport.on("connectionstatechange", (state) => {
+              console.log("[Meets] Consumer transport state:", state);
+            });
+
+            consumerTransportRef.current = transport;
+            resolve();
+          }
+        );
+      });
+    },
+    [consumerTransportRef]
+  );
+
+  const produce = useCallback(
+    async (stream: MediaStream): Promise<void> => {
+      const transport = producerTransportRef.current;
+      if (!transport) return;
+
+      const audioTrack = stream.getAudioTracks()[0];
+      if (audioTrack) {
+        try {
+          const audioProducer = await transport.produce({
+            track: audioTrack,
+            appData: { type: "webcam" as ProducerType, paused: isMuted },
+          });
+
+          if (isMuted) {
+            audioProducer.pause();
+          }
+
+          audioProducerRef.current = audioProducer;
+
+          audioProducer.on("transportclose", () => {
+            audioProducerRef.current = null;
+          });
+        } catch (err) {
+          console.error("[Meets] Failed to produce audio:", err);
+        }
+      }
+
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        try {
+          const videoProducer = await transport.produce({
+            track: videoTrack,
+            encodings: [{ maxBitrate: 500000 }],
+            appData: { type: "webcam" as ProducerType, paused: isCameraOff },
+          });
+
+          if (isCameraOff) {
+            videoProducer.pause();
+          }
+
+          videoProducerRef.current = videoProducer;
+
+          videoProducer.on("transportclose", () => {
+            videoProducerRef.current = null;
+          });
+        } catch (err) {
+          console.error("[Meets] Failed to produce video:", err);
+        }
+      }
+    },
+    [producerTransportRef, audioProducerRef, videoProducerRef, isMuted, isCameraOff]
+  );
+
+  const consumeProducer = useCallback(
+    async (producerInfo: ProducerInfo): Promise<void> => {
+      if (consumersRef.current.has(producerInfo.producerId)) {
+        return;
+      }
+
+      const socket = socketRef.current;
+      const device = deviceRef.current;
+      const transport = consumerTransportRef.current;
+
+      if (!socket || !device || !transport) {
+        pendingProducersRef.current.set(producerInfo.producerId, producerInfo);
+        return;
+      }
+
+      return new Promise((resolve) => {
+        socket.emit(
+          "consume",
+          {
+            producerId: producerInfo.producerId,
+            rtpCapabilities: device.rtpCapabilities,
+          },
+          async (response: ConsumeResponse | { error: string }) => {
+            if ("error" in response) {
+              console.error("[Meets] Consume error:", response.error);
+              resolve();
+              return;
+            }
+
+            try {
+              const consumer = await transport.consume({
+                id: response.id,
+                producerId: response.producerId,
+                kind: response.kind,
+                rtpParameters: response.rtpParameters,
+              });
+
+              consumersRef.current.set(producerInfo.producerId, consumer);
+              producerMapRef.current.set(producerInfo.producerId, {
+                userId: producerInfo.producerUserId,
+                kind: response.kind,
+                type: producerInfo.type,
+              });
+
+              const updateMutedState = (muted: boolean) => {
+                dispatchParticipants({
+                  type: "UPDATE_MUTED",
+                  userId: producerInfo.producerUserId,
+                  muted,
+                });
+              };
+
+              const updateCameraState = (cameraOff: boolean) => {
+                if (producerInfo.type !== "webcam") return;
+                dispatchParticipants({
+                  type: "UPDATE_CAMERA_OFF",
+                  userId: producerInfo.producerUserId,
+                  cameraOff,
+                });
+              };
+
+              const handleTrackMuted = () => {
+                if (response.kind === "audio") {
+                  updateMutedState(true);
+                } else {
+                  updateCameraState(true);
+                }
+              };
+
+              const handleTrackUnmuted = () => {
+                if (response.kind === "audio") {
+                  updateMutedState(false);
+                } else {
+                  updateCameraState(false);
+                }
+              };
+
+              consumer.on("trackended", () => {
+                handleProducerClosed(producerInfo.producerId);
+              });
+              consumer.track.onmute = handleTrackMuted;
+              consumer.track.onunmute = handleTrackUnmuted;
+              const stream = new MediaStream([consumer.track]);
+              dispatchParticipants({
+                type: "UPDATE_STREAM",
+                userId: producerInfo.producerUserId,
+                kind: response.kind,
+                streamType: producerInfo.type,
+                stream,
+                producerId: producerInfo.producerId,
+              });
+
+              if (producerInfo.type === "screen") {
+                setActiveScreenShareId(producerInfo.producerId);
+              }
+
+              if (producerInfo.paused) {
+                if (response.kind === "audio") {
+                  dispatchParticipants({
+                    type: "UPDATE_MUTED",
+                    userId: producerInfo.producerUserId,
+                    muted: true,
+                  });
+                } else if (
+                  response.kind === "video" &&
+                  producerInfo.type === "webcam"
+                ) {
+                  dispatchParticipants({
+                    type: "UPDATE_CAMERA_OFF",
+                    userId: producerInfo.producerUserId,
+                    cameraOff: true,
+                  });
+                }
+              }
+
+              socket.emit(
+                "resumeConsumer",
+                { consumerId: consumer.id },
+                () => {}
+              );
+              resolve();
+            } catch (err) {
+              console.error("[Meets] Failed to create consumer:", err);
+              resolve();
+            }
+          }
+        );
+      });
+    },
+    [
+      consumersRef,
+      pendingProducersRef,
+      socketRef,
+      deviceRef,
+      consumerTransportRef,
+      producerMapRef,
+      dispatchParticipants,
+      handleProducerClosed,
+      setActiveScreenShareId,
+    ]
+  );
+
+  const flushPendingProducers = useCallback(async () => {
+    if (!pendingProducersRef.current.size) return;
+    const pending = Array.from(pendingProducersRef.current.values());
+    pendingProducersRef.current.clear();
+    for (const producerInfo of pending) {
+      await consumeProducer(producerInfo);
+    }
+  }, [pendingProducersRef, consumeProducer]);
+
+  const joinRoomInternal = useCallback(
+    async (
+      targetRoomId: string,
+      stream: MediaStream | null,
+      joinOptions: { displayName?: string; isGhost: boolean }
+    ): Promise<"joined" | "waiting"> => {
+      const socket = socketRef.current;
+      if (!socket) throw new Error("Socket not connected");
+
+      setWaitingMessage(null);
+      setConnectionState("joining");
+
+      return new Promise<"joined" | "waiting">((resolve, reject) => {
+        socket.emit(
+          "joinRoom",
+          {
+            roomId: targetRoomId,
+            sessionId: sessionIdRef.current,
+            displayName: joinOptions.displayName,
+            ghost: joinOptions.isGhost,
+          },
+          async (response: JoinRoomResponse | { error: string }) => {
+            if ("error" in response) {
+              reject(new Error(response.error));
+              return;
+            }
+
+            if (response.status === "waiting") {
+              setConnectionState("waiting");
+              currentRoomIdRef.current = targetRoomId;
+              resolve("waiting");
+              return;
+            }
+
+            try {
+              console.log(
+                "[Meets] Joined room, existing producers:",
+                response.existingProducers
+              );
+              currentRoomIdRef.current = targetRoomId;
+
+              const device = new Device();
+              await device.load({
+                routerRtpCapabilities: response.rtpCapabilities,
+              });
+              deviceRef.current = device;
+
+              const shouldProduce = !!stream && !joinOptions.isGhost;
+
+              if (shouldProduce) {
+                await createProducerTransport(socket, device);
+              }
+              await createConsumerTransport(socket, device);
+
+              if (shouldProduce && stream) {
+                await produce(stream);
+              }
+
+              for (const producer of response.existingProducers) {
+                await consumeProducer(producer);
+              }
+              await flushPendingProducers();
+
+              setConnectionState("joined");
+              playNotificationSound("join");
+              resolve("joined");
+            } catch (err) {
+              reject(err);
+            }
+          }
+        );
+      });
+    },
+    [
+      socketRef,
+      sessionIdRef,
+      setWaitingMessage,
+      setConnectionState,
+      currentRoomIdRef,
+      deviceRef,
+      createProducerTransport,
+      createConsumerTransport,
+      produce,
+      consumeProducer,
+      flushPendingProducers,
+      playNotificationSound,
+    ]
+  );
+
+  const connectSocket = useCallback(
+    (targetRoomId: string): Promise<Socket> => {
+      return new Promise((resolve, reject) => {
+        (async () => {
+          try {
+            if (socketRef.current?.connected) {
+              resolve(socketRef.current);
+              return;
+            }
+
+            setConnectionState("connecting");
+
+            const roomIdForJoin = targetRoomId || currentRoomIdRef.current || "";
+            if (!roomIdForJoin) {
+              throw new Error("Missing room ID");
+            }
+
+            const { token, sfuUrl } = await getJoinInfo(
+              roomIdForJoin,
+              sessionIdRef.current
+            );
+
+            const socket = io(sfuUrl, {
+              transports: ["websocket", "polling"],
+              timeout: SOCKET_TIMEOUT_MS,
+              reconnection: false,
+              auth: { token },
+            });
+
+            const connectionTimeout = setTimeout(() => {
+              socket.disconnect();
+              reject(new Error("Connection timeout"));
+            }, SOCKET_TIMEOUT_MS);
+
+            socket.on("connect", () => {
+              clearTimeout(connectionTimeout);
+              console.log("[Meets] Connected to SFU");
+              setConnectionState("connected");
+              setMeetError(null);
+              reconnectAttemptsRef.current = 0;
+              intentionalDisconnectRef.current = false;
+              resolve(socket);
+            });
+
+            socket.on("disconnect", (reason) => {
+              console.log("[Meets] Disconnected:", reason);
+              if (intentionalDisconnectRef.current) {
+                setConnectionState("disconnected");
+                return;
+              }
+
+              if (currentRoomIdRef.current) {
+                handleReconnectRef.current();
+              } else {
+                setConnectionState("disconnected");
+              }
+            });
+
+            socket.on("roomClosed", ({ reason }: { reason: string }) => {
+              console.log("[Meets] Room closed:", reason);
+              setMeetError({
+                code: "UNKNOWN",
+                message: `Room closed: ${reason}`,
+                recoverable: false,
+              });
+              setWaitingMessage(null);
+              cleanup();
+            });
+
+            socket.on("connect_error", (err) => {
+              clearTimeout(connectionTimeout);
+              console.error("[Meets] Connection error:", err);
+              setMeetError(createMeetError(err, "CONNECTION_FAILED"));
+              setConnectionState("error");
+              reject(err);
+            });
+
+            socket.on("newProducer", async (data: ProducerInfo) => {
+              console.log("[Meets] New producer:", data);
+              await consumeProducer(data);
+            });
+
+            socket.on(
+              "producerClosed",
+              ({ producerId }: { producerId: string }) => {
+                console.log("[Meets] Producer closed:", producerId);
+                handleProducerClosed(producerId);
+
+                if (audioProducerRef.current?.id === producerId) {
+                  setIsMuted(true);
+                  audioProducerRef.current.close();
+                  audioProducerRef.current = null;
+                } else if (videoProducerRef.current?.id === producerId) {
+                  setIsCameraOff(true);
+                  videoProducerRef.current.close();
+                  videoProducerRef.current = null;
+                  const track = localStream?.getVideoTracks()[0];
+                  if (track) {
+                    stopLocalTrack(track);
+                    track.enabled = false;
+                  }
+                  setLocalStream((prev) => {
+                    if (!prev) return prev;
+                    const remaining = prev
+                      .getTracks()
+                      .filter((item) => item.kind !== "video");
+                    return new MediaStream(remaining);
+                  });
+                } else if (screenProducerRef.current?.id === producerId) {
+                  if (screenProducerRef.current.track) {
+                    screenProducerRef.current.track.stop();
+                  }
+                  setIsScreenSharing(false);
+                  screenProducerRef.current.close();
+                  screenProducerRef.current = null;
+                  setActiveScreenShareId(null);
+                }
+              }
+            );
+
+            socket.on(
+              "userJoined",
+              ({
+                userId: joinedUserId,
+                displayName,
+                isGhost,
+              }: {
+                userId: string;
+                displayName?: string;
+                isGhost?: boolean;
+              }) => {
+                console.log("[Meets] User joined:", joinedUserId);
+                if (joinedUserId !== userId) {
+                  playNotificationSound("join");
+                  if (isAdmin && !hasSeenTips) {
+                    setShowAdminTips(true);
+                  }
+                }
+                if (displayName) {
+                  setDisplayNames((prev) => {
+                    const next = new Map(prev);
+                    next.set(joinedUserId, displayName);
+                    return next;
+                  });
+                }
+                const leaveTimeout = leaveTimeoutsRef.current.get(joinedUserId);
+                if (leaveTimeout) {
+                  window.clearTimeout(leaveTimeout);
+                  leaveTimeoutsRef.current.delete(joinedUserId);
+                }
+                dispatchParticipants({
+                  type: "ADD_PARTICIPANT",
+                  userId: joinedUserId,
+                  isGhost,
+                });
+              }
+            );
+
+            socket.on(
+              "userLeft",
+              ({ userId: leftUserId }: { userId: string }) => {
+                console.log("[Meets] User left:", leftUserId);
+                if (leftUserId !== userId) {
+                  playNotificationSound("leave");
+                }
+                setDisplayNames((prev) => {
+                  if (!prev.has(leftUserId)) return prev;
+                  const next = new Map(prev);
+                  next.delete(leftUserId);
+                  return next;
+                });
+
+                const producersToClose = Array.from(
+                  producerMapRef.current.entries()
+                )
+                  .filter(([, info]) => info.userId === leftUserId)
+                  .map(([producerId]) => producerId);
+
+                for (const [producerId, info] of pendingProducersRef.current) {
+                  if (info.producerUserId === leftUserId) {
+                    pendingProducersRef.current.delete(producerId);
+                  }
+                }
+
+                for (const producerId of producersToClose) {
+                  handleProducerClosed(producerId);
+                }
+
+                dispatchParticipants({
+                  type: "MARK_LEAVING",
+                  userId: leftUserId,
+                });
+
+                scheduleParticipantRemoval(leftUserId);
+              }
+            );
+
+            socket.on(
+              "displayNameSnapshot",
+              ({
+                users,
+                roomId: eventRoomId,
+              }: {
+                users: { userId: string; displayName?: string }[];
+                roomId?: string;
+              }) => {
+                if (!isRoomEvent(eventRoomId)) return;
+                const snapshot = new Map<string, string>();
+                (users || []).forEach(({ userId, displayName }) => {
+                  if (displayName) {
+                    snapshot.set(userId, displayName);
+                  }
+                });
+                setDisplayNames(snapshot);
+              }
+            );
+
+            socket.on(
+              "handRaisedSnapshot",
+              ({ users, roomId: eventRoomId }: HandRaisedSnapshot) => {
+                if (!isRoomEvent(eventRoomId)) return;
+                (users || []).forEach(({ userId: raisedUserId, raised }) => {
+                  if (raisedUserId === userId) {
+                    setIsHandRaised(raised);
+                    return;
+                  }
+                  dispatchParticipants({
+                    type: "UPDATE_HAND_RAISED",
+                    userId: raisedUserId,
+                    raised,
+                  });
+                });
+              }
+            );
+
+            socket.on(
+              "displayNameUpdated",
+              ({
+                userId: updatedUserId,
+                displayName,
+                roomId: eventRoomId,
+              }: {
+                userId: string;
+                displayName: string;
+                roomId?: string;
+              }) => {
+                if (!isRoomEvent(eventRoomId)) return;
+                setDisplayNames((prev) => {
+                  const next = new Map(prev);
+                  next.set(updatedUserId, displayName);
+                  return next;
+                });
+              }
+            );
+
+            socket.on(
+              "participantMuted",
+              ({ userId, muted }: { userId: string; muted: boolean }) => {
+                dispatchParticipants({
+                  type: "UPDATE_MUTED",
+                  userId,
+                  muted,
+                });
+              }
+            );
+
+            socket.on(
+              "participantCameraOff",
+              ({
+                userId: camUserId,
+                cameraOff,
+              }: {
+                userId: string;
+                cameraOff: boolean;
+              }) => {
+                dispatchParticipants({
+                  type: "UPDATE_CAMERA_OFF",
+                  userId: camUserId,
+                  cameraOff,
+                });
+              }
+            );
+
+            socket.on(
+              "setVideoQuality",
+              async ({ quality }: { quality: VideoQuality }) => {
+                console.log(`[Meets] Setting video quality to: ${quality}`);
+                setVideoQuality(quality);
+                await updateVideoQualityRef.current(quality);
+              }
+            );
+
+            socket.on("chatMessage", (message: ChatMessage) => {
+              console.log("[Meets] Chat message received:", message);
+              chat.setChatMessages((prev) => [...prev, message]);
+              if (message.userId !== userId) {
+                chat.setChatOverlayMessages((prev) => [...prev, message]);
+                setTimeout(() => {
+                  chat.setChatOverlayMessages((prev) =>
+                    prev.filter((m) => m.id !== message.id)
+                  );
+                }, 5000);
+              }
+              if (!chat.isChatOpenRef.current) {
+                chat.setUnreadCount((prev) => prev + 1);
+              }
+            });
+
+            socket.on("reaction", (reaction: ReactionNotification) => {
+              if (reaction.kind && reaction.value) {
+                addReaction({
+                  userId: reaction.userId,
+                  kind: reaction.kind,
+                  value: reaction.value,
+                  label: reaction.label,
+                  timestamp: reaction.timestamp,
+                });
+                return;
+              }
+
+              if (reaction.emoji) {
+                addReaction({
+                  userId: reaction.userId,
+                  kind: "emoji",
+                  value: reaction.emoji,
+                  timestamp: reaction.timestamp,
+                });
+              }
+            });
+
+            socket.on(
+              "handRaised",
+              ({ userId: raisedUserId, raised }: HandRaisedNotification) => {
+                if (raisedUserId === userId) {
+                  setIsHandRaised(raised);
+                  return;
+                }
+                dispatchParticipants({
+                  type: "UPDATE_HAND_RAISED",
+                  userId: raisedUserId,
+                  raised,
+                });
+              }
+            );
+
+            socket.on("kicked", () => {
+              cleanup();
+              setMeetError({
+                code: "UNKNOWN",
+                message: "You have been kicked from the meeting.",
+                recoverable: false,
+              });
+            });
+
+            socket.on(
+              "redirect",
+              async ({ newRoomId }: { newRoomId: string }) => {
+                console.log(
+                  `[Meets] Redirect received. Initiating full switch to ${newRoomId}`
+                );
+                handleRedirectRef.current(newRoomId);
+              }
+            );
+
+            socket.on(
+              "userRequestedJoin",
+              ({
+                userId,
+                displayName,
+                roomId: eventRoomId,
+              }: {
+                userId: string;
+                displayName: string;
+                roomId?: string;
+              }) => {
+                if (!isRoomEvent(eventRoomId)) return;
+                console.log("[Meets] User requesting to join:", userId);
+                playNotificationSound("waiting");
+                setPendingUsers((prev) => {
+                  const newMap = new Map(prev);
+                  newMap.set(userId, displayName);
+                  return newMap;
+                });
+              }
+            );
+
+            socket.on(
+              "pendingUsersSnapshot",
+              ({
+                users,
+                roomId: eventRoomId,
+              }: {
+                users: { userId: string; displayName?: string }[];
+                roomId?: string;
+              }) => {
+                if (!isRoomEvent(eventRoomId)) return;
+                const snapshot = new Map(
+                  (users || []).map(({ userId, displayName }) => [
+                    userId,
+                    displayName || userId,
+                  ])
+                );
+                setPendingUsers(snapshot);
+              }
+            );
+
+            socket.on(
+              "userAdmitted",
+              ({ userId, roomId: eventRoomId }: { userId: string; roomId?: string }) => {
+                if (!isRoomEvent(eventRoomId)) return;
+                setPendingUsers((prev) => {
+                  const newMap = new Map(prev);
+                  newMap.delete(userId);
+                  return newMap;
+                });
+              }
+            );
+
+            socket.on(
+              "userRejected",
+              ({ userId, roomId: eventRoomId }: { userId: string; roomId?: string }) => {
+                if (!isRoomEvent(eventRoomId)) return;
+                setPendingUsers((prev) => {
+                  const newMap = new Map(prev);
+                  newMap.delete(userId);
+                  return newMap;
+                });
+              }
+            );
+
+            socket.on(
+              "pendingUserLeft",
+              ({ userId, roomId: eventRoomId }: { userId: string; roomId?: string }) => {
+                if (!isRoomEvent(eventRoomId)) return;
+                setPendingUsers((prev) => {
+                  const newMap = new Map(prev);
+                  newMap.delete(userId);
+                  return newMap;
+                });
+              }
+            );
+
+            socket.on("joinApproved", () => {
+              console.log("[Meets] Join approved! Re-attempting join...");
+              const joinOptions = joinOptionsRef.current;
+              const stream = localStreamRef.current;
+              if (currentRoomIdRef.current && (stream || joinOptions.isGhost)) {
+                joinRoomInternal(
+                  currentRoomIdRef.current,
+                  stream,
+                  joinOptions
+                ).catch(console.error);
+              } else {
+                console.error(
+                  "[Meets] Cannot re-join: missing room ID or local stream",
+                  {
+                    roomId: currentRoomIdRef.current,
+                    hasStream: !!localStreamRef.current,
+                    isGhost: joinOptionsRef.current.isGhost,
+                  }
+                );
+              }
+            });
+
+            socket.on("joinRejected", () => {
+              console.log("[Meets] Join rejected.");
+              setMeetError({
+                code: "PERMISSION_DENIED",
+                message: "The host has denied your request to join.",
+                recoverable: false,
+              });
+              setConnectionState("error");
+              setWaitingMessage(null);
+              cleanup();
+            });
+
+            socket.on(
+              "waitingRoomStatus",
+              ({
+                message,
+                roomId: eventRoomId,
+              }: {
+                message: string;
+                roomId?: string;
+              }) => {
+                if (!isRoomEvent(eventRoomId)) return;
+                setWaitingMessage(message);
+              }
+            );
+
+            socketRef.current = socket;
+          } catch (err) {
+            console.error("Failed to get join info:", err);
+            setMeetError({
+              code: "CONNECTION_FAILED",
+              message: "Authentication failed",
+              recoverable: false,
+            });
+            setConnectionState("error");
+            reject(err);
+          }
+        })();
+      });
+    },
+    [
+      addReaction,
+      audioProducerRef,
+      cleanup,
+      consumeProducer,
+      currentRoomIdRef,
+      deviceRef,
+      dispatchParticipants,
+      handleLocalTrackEnded,
+      handleProducerClosed,
+      handleRedirectRef,
+      handleReconnectRef,
+      getJoinInfo,
+      hasSeenTips,
+      isAdmin,
+      isRoomEvent,
+      joinOptionsRef,
+      joinRoomInternal,
+      leaveTimeoutsRef,
+      localStream,
+      localStreamRef,
+      pendingProducersRef,
+      playNotificationSound,
+      producerMapRef,
+      reconnectAttemptsRef,
+      screenProducerRef,
+      setActiveScreenShareId,
+      setConnectionState,
+      setDisplayNames,
+      setIsCameraOff,
+      setIsMuted,
+      setIsScreenSharing,
+      setIsHandRaised,
+      setMeetError,
+      setPendingUsers,
+      setShowAdminTips,
+      setWaitingMessage,
+      setVideoQuality,
+      socketRef,
+      stopLocalTrack,
+      updateVideoQualityRef,
+      userId,
+    ]
+  );
+
+  const handleReconnect = useCallback(async () => {
+    if (reconnectInFlightRef.current) return;
+    reconnectInFlightRef.current = true;
+
+    try {
+      while (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+        setConnectionState("reconnecting");
+        reconnectAttemptsRef.current++;
+        const delay =
+          RECONNECT_DELAY_MS * 2 ** (reconnectAttemptsRef.current - 1);
+
+        console.log(
+          `[Meets] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`
+        );
+        await new Promise((r) => setTimeout(r, delay));
+
+        try {
+          const reconnectRoomId = currentRoomIdRef.current;
+          cleanupRoomResources({ resetRoomId: false });
+          socketRef.current?.disconnect();
+          socketRef.current = null;
+          if (!reconnectRoomId) {
+            throw new Error("Missing room ID for reconnect");
+          }
+          await connectSocket(reconnectRoomId);
+
+          const joinOptions = joinOptionsRef.current;
+          const stream = localStreamRef.current || localStream;
+          if (reconnectRoomId && (stream || joinOptions.isGhost)) {
+            await joinRoomInternal(reconnectRoomId, stream, joinOptions);
+          }
+          return;
+        } catch (_err) {
+          // retry
+        }
+      }
+
+      setMeetError({
+        code: "CONNECTION_FAILED",
+        message: "Failed to reconnect after multiple attempts",
+        recoverable: false,
+      });
+      setConnectionState("error");
+    } finally {
+      reconnectInFlightRef.current = false;
+    }
+  }, [
+    cleanupRoomResources,
+    connectSocket,
+    currentRoomIdRef,
+    joinOptionsRef,
+    joinRoomInternal,
+    localStream,
+    localStreamRef,
+    reconnectAttemptsRef,
+    reconnectInFlightRef,
+    setConnectionState,
+    setMeetError,
+    socketRef,
+  ]);
+
+  useEffect(() => {
+    handleReconnectRef.current = handleReconnect;
+  }, [handleReconnect, handleReconnectRef]);
+
+  const handleRedirectCallback = useCallback(
+    async (newRoomId: string) => {
+      console.log(`[Meets] Executing hard redirect to ${newRoomId}`);
+
+      cleanup();
+      setRoomId(newRoomId);
+      shouldAutoJoinRef.current = true;
+    },
+    [cleanup, setRoomId, shouldAutoJoinRef]
+  );
+
+  useEffect(() => {
+    handleRedirectRef.current = handleRedirectCallback;
+  }, [handleRedirectCallback, handleRedirectRef]);
+
+  const startJoin = useCallback(
+    async (targetRoomId: string) => {
+      if (refs.abortControllerRef.current?.signal.aborted) return;
+
+      setMeetError(null);
+      setConnectionState("connecting");
+      primeAudioOutput();
+      refs.intentionalDisconnectRef.current = false;
+      setRoomId(targetRoomId);
+      const normalizedDisplayName = normalizeDisplayName(displayNameInput);
+      const joinOptions = {
+        displayName: isAdmin ? normalizedDisplayName || undefined : undefined,
+        isGhost: ghostEnabled,
+      };
+      joinOptionsRef.current = joinOptions;
+      let stream: MediaStream | null = null;
+
+      try {
+        await connectSocket(targetRoomId);
+        if (!joinOptions.isGhost) {
+          stream = await requestMediaPermissions();
+          if (!stream) {
+            setConnectionState("error");
+            return;
+          }
+          localStreamRef.current = stream;
+          setLocalStream(stream);
+        } else {
+          localStreamRef.current = null;
+          setLocalStream(null);
+        }
+
+        await joinRoomInternal(targetRoomId, stream, joinOptions);
+      } catch (err) {
+        console.error("[Meets] Error joining room:", err);
+        if (stream) {
+          stream.getTracks().forEach((track) => stopLocalTrack(track));
+          setLocalStream(null);
+        }
+        setMeetError(createMeetError(err));
+        setConnectionState("error");
+      }
+    },
+    [
+      connectSocket,
+      displayNameInput,
+      ghostEnabled,
+      isAdmin,
+      joinOptionsRef,
+      joinRoomInternal,
+      localStreamRef,
+      primeAudioOutput,
+      requestMediaPermissions,
+      refs.abortControllerRef,
+      refs.intentionalDisconnectRef,
+      setConnectionState,
+      setLocalStream,
+      setMeetError,
+      setRoomId,
+      stopLocalTrack,
+    ]
+  );
+
+  const joinRoom = useCallback(async () => {
+    await startJoin(roomId);
+  }, [roomId, startJoin]);
+
+  const joinRoomById = useCallback(
+    async (targetRoomId: string) => {
+      await startJoin(targetRoomId);
+    },
+    [startJoin]
+  );
+
+  useEffect(() => {
+    if (shouldAutoJoinRef.current) {
+      console.log("[Meets] Auto-joining new room...");
+      shouldAutoJoinRef.current = false;
+      joinRoom();
+    }
+  }, [joinRoom, shouldAutoJoinRef]);
+
+  return {
+    cleanup,
+    cleanupRoomResources,
+    connectSocket,
+    joinRoom,
+    joinRoomById,
+  };
+}

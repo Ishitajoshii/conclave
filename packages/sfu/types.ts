@@ -1,0 +1,215 @@
+import type {
+  Router,
+  Producer,
+  Consumer,
+  WebRtcTransport,
+  RtpCapabilities,
+  RtpParameters,
+  MediaKind,
+  DtlsParameters,
+} from "mediasoup/types";
+import type { Socket } from "socket.io";
+
+// ============================================
+// Client & Room Types
+// ============================================
+
+export interface RoomInfo {
+  id: string;
+  userCount: number;
+}
+
+export interface GetRoomsResponse {
+  rooms: RoomInfo[];
+}
+
+export interface RedirectData {
+  userId: string;
+  newRoomId: string;
+}
+
+export interface ClientOptions {
+  id: string;
+  socket: Socket;
+}
+
+export interface RoomOptions {
+  id: string;
+  router: Router;
+}
+
+// ============================================
+// Socket Event Payloads
+// ============================================
+
+export interface JoinRoomData {
+  roomId: string;
+  sessionId?: string;
+  displayName?: string;
+  ghost?: boolean;
+}
+
+export interface JoinRoomResponse {
+  rtpCapabilities: RtpCapabilities;
+  existingProducers: ProducerInfo[];
+  status?: "waiting" | "joined";
+}
+
+export interface CreateTransportResponse {
+  id: string;
+  iceParameters: object;
+  iceCandidates: object[];
+  dtlsParameters: DtlsParameters;
+}
+
+export interface ConnectTransportData {
+  transportId: string;
+  dtlsParameters: DtlsParameters;
+}
+
+export interface ProduceData {
+  transportId: string;
+  kind: MediaKind;
+  rtpParameters: RtpParameters; // Using RtpParameters from mediasoup/types
+  appData: { type: "webcam" | "screen"; paused?: boolean };
+}
+
+export interface ProduceResponse {
+  producerId: string;
+}
+
+export interface ConsumeData {
+  producerId: string;
+  rtpCapabilities: RtpCapabilities;
+}
+
+export interface ConsumeResponse {
+  id: string;
+  producerId: string;
+  kind: MediaKind;
+  rtpParameters: RtpParameters;
+}
+
+export interface ProducerInfo {
+  producerId: string;
+  producerUserId: string;
+  kind: MediaKind;
+  type: "webcam" | "screen";
+  paused?: boolean;
+}
+
+export interface ToggleMediaData {
+  producerId: string;
+  paused: boolean;
+}
+
+export type VideoQuality = "low" | "standard";
+
+export interface SetVideoQualityNotification {
+  quality: VideoQuality;
+}
+
+export interface NewProducerNotification {
+  producerId: string;
+  producerUserId: string;
+  kind: MediaKind;
+  type: "webcam" | "screen";
+}
+
+export interface ProducerClosedNotification {
+  producerId: string;
+  producerUserId: string;
+}
+
+export interface UserJoinedNotification {
+  userId: string;
+}
+
+export interface UserLeftNotification {
+  userId: string;
+}
+
+// ============================================
+// Chat Types
+// ============================================
+
+export interface ChatMessage {
+  id: string;
+  userId: string;
+  displayName: string;
+  content: string;
+  timestamp: number;
+}
+
+export interface SendChatData {
+  content: string;
+}
+
+export interface ChatMessageNotification extends ChatMessage {}
+
+// ============================================
+// Reactions
+// ============================================
+
+export interface SendReactionData {
+  emoji?: string;
+  kind?: "emoji" | "asset";
+  value?: string;
+  label?: string;
+}
+
+export interface ReactionNotification {
+  userId: string;
+  kind: "emoji" | "asset";
+  value: string;
+  label?: string;
+  timestamp: number;
+}
+
+// ============================================
+// Raise Hand
+// ============================================
+
+export interface SetHandRaisedData {
+  raised: boolean;
+}
+
+export interface HandRaisedNotification {
+  userId: string;
+  raised: boolean;
+  timestamp: number;
+}
+
+export interface HandRaisedSnapshot {
+  users: { userId: string; raised: boolean }[];
+}
+
+// ============================================
+// Media Constraints
+// ============================================
+
+export const VIDEO_CONSTRAINTS = {
+  maxWidth: 640,
+  maxHeight: 360,
+  maxFrameRate: 30,
+  maxBitrate: 500000, // 500 kbps for 360p
+} as const;
+
+export const AUDIO_CONSTRAINTS = {
+  maxBitrate: 64000, // 64 kbps for audio
+} as const;
+
+// ============================================
+// Re-exports for convenience
+// ============================================
+
+export type {
+  Router,
+  Producer,
+  Consumer,
+  WebRtcTransport,
+  RtpCapabilities,
+  RtpParameters,
+  MediaKind,
+  DtlsParameters,
+};
