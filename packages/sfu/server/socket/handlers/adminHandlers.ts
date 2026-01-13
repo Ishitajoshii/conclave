@@ -8,39 +8,53 @@ export const registerAdminHandlers = (
   options: { roomId: string },
 ): void => {
   const { socket, state } = context;
+  const respond = (cb: unknown, payload: Record<string, unknown>) => {
+    if (typeof cb === "function") {
+      cb(payload);
+    }
+  };
 
   socket.on(
     "kickUser",
     ({ userId: targetId }: { userId: string }, cb) => {
-      if (!context.currentRoom) return;
+      if (!context.currentRoom) {
+        respond(cb, { error: "Room not found" });
+        return;
+      }
       const target = context.currentRoom.getClient(targetId);
       if (target) {
         target.socket.emit("kicked");
         target.socket.disconnect(true);
-        cb({ success: true });
+        respond(cb, { success: true });
       } else {
-        cb({ error: "User not found" });
+        respond(cb, { error: "User not found" });
       }
     },
   );
 
   socket.on("closeRemoteProducer", ({ producerId }, cb) => {
-    if (!context.currentRoom) return;
+    if (!context.currentRoom) {
+      respond(cb, { error: "Room not found" });
+      return;
+    }
     for (const client of context.currentRoom.clients.values()) {
       if (client.removeProducerById(producerId)) {
         socket.to(context.currentRoom.channelId).emit("producerClosed", {
           producerId,
           producerUserId: client.id,
         });
-        cb({ success: true });
+        respond(cb, { success: true });
         return;
       }
     }
-    cb({ error: "Producer not found" });
+    respond(cb, { error: "Producer not found" });
   });
 
   socket.on("muteAll", (cb) => {
-    if (!context.currentRoom) return;
+    if (!context.currentRoom) {
+      respond(cb, { error: "Room not found" });
+      return;
+    }
     let count = 0;
 
     for (const client of context.currentRoom.clients.values()) {
@@ -57,11 +71,14 @@ export const registerAdminHandlers = (
         }
       }
     }
-    cb({ success: true, count });
+    respond(cb, { success: true, count });
   });
 
   socket.on("closeAllVideo", (cb) => {
-    if (!context.currentRoom) return;
+    if (!context.currentRoom) {
+      respond(cb, { error: "Room not found" });
+      return;
+    }
     let count = 0;
 
     for (const client of context.currentRoom.clients.values()) {
@@ -78,7 +95,7 @@ export const registerAdminHandlers = (
         }
       }
     }
-    cb({ success: true, count });
+    respond(cb, { success: true, count });
   });
 
   socket.on("getRooms", (cb) => {
@@ -92,27 +109,33 @@ export const registerAdminHandlers = (
         id: room.id,
         userCount: room.clientCount,
       }));
-    cb({ rooms: roomList });
+    respond(cb, { rooms: roomList });
   });
 
   socket.on(
     "redirectUser",
     ({ userId: targetId, newRoomId }: RedirectData, cb) => {
-      if (!context.currentRoom) return;
+      if (!context.currentRoom) {
+        respond(cb, { error: "Room not found" });
+        return;
+      }
 
       const targetClient = context.currentRoom.getClient(targetId);
       if (targetClient) {
         Logger.info(`Admin redirecting user ${targetId} to ${newRoomId}`);
         targetClient.socket.emit("redirect", { newRoomId });
-        cb({ success: true });
+        respond(cb, { success: true });
       } else {
-        cb({ error: "User not found" });
+        respond(cb, { error: "User not found" });
       }
     },
   );
 
   socket.on("admitUser", ({ userId: targetId }, cb) => {
-    if (!context.currentRoom) return;
+    if (!context.currentRoom) {
+      respond(cb, { error: "Room not found" });
+      return;
+    }
 
     const pending = context.currentRoom.pendingClients.get(targetId);
     if (pending) {
@@ -129,14 +152,17 @@ export const registerAdminHandlers = (
         });
       }
 
-      cb({ success: true });
+      respond(cb, { success: true });
     } else {
-      cb({ error: "User not found in waiting room" });
+      respond(cb, { error: "User not found in waiting room" });
     }
   });
 
   socket.on("rejectUser", ({ userId: targetId }, cb) => {
-    if (!context.currentRoom) return;
+    if (!context.currentRoom) {
+      respond(cb, { error: "Room not found" });
+      return;
+    }
 
     const pending = context.currentRoom.pendingClients.get(targetId);
     if (pending) {
@@ -153,14 +179,17 @@ export const registerAdminHandlers = (
         });
       }
 
-      cb({ success: true });
+      respond(cb, { success: true });
     } else {
-      cb({ error: "User not found in waiting room" });
+      respond(cb, { error: "User not found in waiting room" });
     }
   });
 
   socket.on("lockRoom", ({ locked }: { locked: boolean }, cb) => {
-    if (!context.currentRoom) return;
+    if (!context.currentRoom) {
+      respond(cb, { error: "Room not found" });
+      return;
+    }
 
     context.currentRoom.setLocked(locked);
     Logger.info(
@@ -177,11 +206,14 @@ export const registerAdminHandlers = (
       roomId: context.currentRoom.id,
     });
 
-    cb({ success: true, locked });
+    respond(cb, { success: true, locked });
   });
 
   socket.on("getRoomLockStatus", (cb) => {
-    if (!context.currentRoom) return;
-    cb({ locked: context.currentRoom.isLocked });
+    if (!context.currentRoom) {
+      respond(cb, { error: "Room not found" });
+      return;
+    }
+    respond(cb, { locked: context.currentRoom.isLocked });
   });
 };
