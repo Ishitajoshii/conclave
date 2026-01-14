@@ -44,4 +44,5 @@ services:
       BROWSER_HOST_ADDRESS: ${BROWSER_HOST_ADDRESS:-localhost}
       BROWSER_PUBLIC_BASE_URL: ${BROWSER_PUBLIC_BASE_URL:-}
       BROWSER_IMAGE_NAME: "conclave-browser:latest"
+      BROWSER_AUDIO_TARGET_HOST: "172.17.0.1"
     restart: unless-stopped
