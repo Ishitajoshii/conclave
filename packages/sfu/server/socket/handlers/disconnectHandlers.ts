@@ -5,6 +5,7 @@ import { cleanupRoom } from "../../rooms.js";
 import { emitUserLeft } from "../../notifications.js";
 import type { ConnectionContext } from "../context.js";
 import { registerAdminHandlers } from "./adminHandlers.js";
+import { cleanupRoomBrowser } from "./sharedBrowserHandlers.js";
 
 const promoteNextAdmin = (room: Room): Admin | null => {
   for (const client of room.clients.values()) {
@@ -123,7 +124,9 @@ export const registerDisconnectHandlers = (
                       Logger.info(
                         `Cleanup executed for room ${roomId}. Room is empty.`,
                       );
-                      cleanupRoom(state, roomChannelId);
+                      if (cleanupRoom(state, roomChannelId)) {
+                        void cleanupRoomBrowser(roomChannelId);
+                      }
                     }
                   }
                 }
@@ -135,7 +138,9 @@ export const registerDisconnectHandlers = (
         }
 
         if (state.rooms.has(roomChannelId)) {
-          cleanupRoom(state, roomChannelId);
+          if (cleanupRoom(state, roomChannelId)) {
+            void cleanupRoomBrowser(roomChannelId);
+          }
         }
 
         Logger.info(`User ${userId} left room ${roomId}`);
@@ -171,7 +176,9 @@ export const registerDisconnectHandlers = (
             });
           }
           if (pendingRoom.isEmpty()) {
-            cleanupRoom(state, context.pendingRoomChannelId);
+            if (cleanupRoom(state, context.pendingRoomChannelId)) {
+              void cleanupRoomBrowser(context.pendingRoomChannelId);
+            }
           }
         }
       }

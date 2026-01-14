@@ -145,7 +145,7 @@ export interface SendChatData {
   content: string;
 }
 
-export interface ChatMessageNotification extends ChatMessage {}
+export interface ChatMessageNotification extends ChatMessage { }
 
 // ============================================
 // Reactions
@@ -182,6 +182,33 @@ export interface HandRaisedNotification {
 
 export interface HandRaisedSnapshot {
   users: { userId: string; raised: boolean }[];
+}
+
+// shared browser types
+
+export interface LaunchBrowserData {
+  url: string;
+}
+
+export interface LaunchBrowserResponse {
+  success: boolean;
+  noVncUrl?: string;
+  error?: string;
+}
+
+export interface BrowserNavigateData {
+  url: string;
+}
+
+export interface BrowserStateNotification {
+  active: boolean;
+  url?: string;
+  noVncUrl?: string;
+  controllerUserId?: string;
+}
+
+export interface BrowserClosedNotification {
+  closedBy?: string;
 }
 
 // ============================================

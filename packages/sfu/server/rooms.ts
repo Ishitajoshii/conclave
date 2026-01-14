@@ -32,11 +32,13 @@ export const getOrCreateRoom = async (
   return room;
 };
 
-export const cleanupRoom = (state: SfuState, channelId: string): void => {
+export const cleanupRoom = (state: SfuState, channelId: string): boolean => {
   const room = state.rooms.get(channelId);
   if (room && room.isEmpty()) {
     room.close();
     state.rooms.delete(channelId);
     Logger.info(`Closed empty room: ${room.id} (${room.clientId})`);
+    return true;
   }
+  return false;
 };

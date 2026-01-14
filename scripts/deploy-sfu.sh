@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+DEPLOY_BROWSER="false"
+for arg in "$@"; do
+  case $arg in
+    --with-browser)
+      DEPLOY_BROWSER="true"
+      shift
+      ;;
+  esac
+done
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ROOT_DIR}/.env"
 COMPOSE_FILE="${ROOT_DIR}/docker-compose.sfu.yml"
@@ -72,7 +82,7 @@ json_field() {
 
 status_json() {
   local url="$1"
-  curl -fsS -H "x-sfu-secret: ${SFU_SECRET}" "${url}/status" 2>/dev/null || true
+  curl -fsS --connect-timeout 3 --max-time 5 -H "x-sfu-secret: ${SFU_SECRET}" "${url}/status" 2>/dev/null || true
 }
 
 SFU_A_URL="$(get_pool_url "sfu-a")"
@@ -86,6 +96,11 @@ git -C "$ROOT_DIR" pull
 
 echo "Installing SFU dependencies..."
 npm -C "${ROOT_DIR}/packages/sfu" install
+
+if [[ "$DEPLOY_BROWSER" == "true" ]]; then
+  echo "Installing Browser Service dependencies..."
+  npm -C "${ROOT_DIR}/packages/shared-browser" install
+fi
 
 if [[ "$HAS_UPSTASH" == "true" ]]; then
   echo "Using Upstash Redis; skipping local Redis container."
@@ -204,4 +219,24 @@ fi
 echo "Rebuilding and starting ${ACTIVE_SERVICE}..."
 "${COMPOSE[@]}" up -d --build "$ACTIVE_SERVICE"
 
+if [[ "$DEPLOY_BROWSER" == "true" ]]; then
+  echo ""
+  echo "=== Deploying Browser Service ==="
+  
+  BROWSER_DOCKER_DIR="${ROOT_DIR}/packages/shared-browser/docker"
+  if [[ -d "$BROWSER_DOCKER_DIR" ]]; then
+    echo "Building browser container image..."
+    docker build -t conclave-browser:latest "$BROWSER_DOCKER_DIR"
+  fi
+  
+  echo "Building and starting browser-service..."
+  "${COMPOSE[@]}" up -d --build browser-service
+  
+  echo "Browser service deployed."
+fi
+
+echo ""
 echo "SFU deploy complete."
+if [[ "$DEPLOY_BROWSER" == "true" ]]; then
+  echo "Browser service deploy complete."
+fi

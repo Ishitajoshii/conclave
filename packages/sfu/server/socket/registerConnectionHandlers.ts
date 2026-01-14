@@ -10,6 +10,7 @@ import { registerJoinRoomHandler } from "./handlers/joinRoom.js";
 import { registerMediaHandlers } from "./handlers/mediaHandlers.js";
 import { registerReactionHandlers } from "./handlers/reactionHandlers.js";
 import { registerRouterHandlers } from "./handlers/routerHandlers.js";
+import { registerSharedBrowserHandlers } from "./handlers/sharedBrowserHandlers.js";
 import { registerTransportHandlers } from "./handlers/transportHandlers.js";
 
 export const registerConnectionHandlers = (
@@ -30,6 +31,7 @@ export const registerConnectionHandlers = (
     registerChatHandlers(context);
     registerReactionHandlers(context);
     registerHandHandlers(context);
+    registerSharedBrowserHandlers(context);
     registerDisconnectHandlers(context);
   });
 };

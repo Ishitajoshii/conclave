@@ -14,6 +14,7 @@ import { cleanupRoom, getOrCreateRoom, getRoomChannelId } from "../../rooms.js";
 import type { ConnectionContext } from "../context.js";
 import { registerAdminHandlers } from "./adminHandlers.js";
 import { respond } from "./ack.js";
+import { cleanupRoomBrowser } from "./sharedBrowserHandlers.js";
 
 export const registerJoinRoomHandler = (context: ConnectionContext): void => {
   const { socket, io, state } = context;
@@ -185,7 +186,9 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
           }
 
           socket.leave(context.currentRoom.channelId);
-          cleanupRoom(state, context.currentRoom.channelId);
+          if (cleanupRoom(state, context.currentRoom.channelId)) {
+            void cleanupRoomBrowser(context.currentRoom.channelId);
+          }
 
           context.currentRoom = null;
           context.currentClient = null;
