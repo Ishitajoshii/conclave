@@ -157,13 +157,10 @@ export class ContainerManager {
                 Env: containerEnv,
                 HostConfig: {
                     PortBindings: {
-                        "6080/tcp": [{ HostPort: port.toString() }],
+                        "6080/tcp": [{ HostIp: "0.0.0.0", HostPort: port.toString() }],
                     },
                     AutoRemove: true,
                     ExtraHosts: ["host.docker.internal:host-gateway"],
-                    NanoCpus: 1_000_000_000,
-                    Memory: 1024 * 1024 * 1024,
-                    MemorySwap: 1024 * 1024 * 1024,
                 },
                 ExposedPorts: {
                     "6080/tcp": {},
