@@ -157,21 +157,28 @@ function BrowserLayout({
                         )}
                     </div>
                 )}
-                <div className="flex-1 min-h-0 flex items-center justify-center bg-black">
+                <div className="flex-1 min-h-0 flex items-center justify-center bg-black overflow-hidden">
                     {browserVideoStream ? (
-                        <div className="relative w-full h-full max-w-[calc(100vh*16/9)] aspect-video bg-black">
+                        <div
+                            className="relative bg-black"
+                            style={{
+                                width: "min(100%, calc((100vh - 200px) * 16 / 9))",
+                                aspectRatio: "16 / 9",
+                            }}
+                        >
                             <video
                                 ref={browserVideoRef}
                                 autoPlay
                                 playsInline
                                 muted
-                                className="absolute inset-0 w-full h-full object-fill"
+                                className="absolute inset-0 w-full h-full"
+                                style={{ objectFit: "fill", pointerEvents: "none" }}
                             />
                             {isReady && (
                                 <iframe
-                                    src={`${resolvedNoVncUrl}${resolvedNoVncUrl.includes("?") ? "&" : "?"}compression=9&quality=0&resize=scale`}
-                                    className="absolute inset-0 w-full h-full border-0 opacity-0"
-                                    style={{ pointerEvents: "auto" }}
+                                    src={`${resolvedNoVncUrl}${resolvedNoVncUrl.includes("?") ? "&" : "?"}autoconnect=true&resize=scale&quality=0&compression=9`}
+                                    className="absolute inset-0 w-full h-full border-0"
+                                    style={{ opacity: 0, pointerEvents: "auto" }}
                                     allow="clipboard-read; clipboard-write"
                                     title="Shared Browser Input"
                                 />
@@ -180,12 +187,12 @@ function BrowserLayout({
                     ) : isReady ? (
                         <iframe
                             src={resolvedNoVncUrl}
-                            className="absolute inset-0 w-full h-full border-0"
+                            className="w-full h-full border-0"
                             allow="clipboard-read; clipboard-write"
                             title="Shared Browser"
                         />
                     ) : (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1a1a1a] to-[#0d0e0d]">
+                        <div className="flex flex-col items-center justify-center gap-3">
                             <div className="w-16 h-16 rounded-full bg-[#F95F4A]/10 flex items-center justify-center">
                                 <Globe className="w-8 h-8 text-[#F95F4A] animate-pulse" />
                             </div>

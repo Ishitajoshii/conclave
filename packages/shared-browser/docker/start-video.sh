@@ -29,7 +29,7 @@ RTCP_PORT="${VIDEO_RTCP_PORT:-$((VIDEO_TARGET_PORT + 1))}"
 echo "[Video] Starting capture: ${WIDTH}x${HEIGHT}@${FRAMERATE}fps → ${VIDEO_TARGET_IP}:${VIDEO_TARGET_PORT} (RTCP: ${RTCP_PORT})"
 
 exec ffmpeg -nostdin -hide_banner -loglevel warning \
-  -f x11grab -draw_mouse 0 -video_size "${WIDTH}x${HEIGHT}" -framerate "${FRAMERATE}" -i :99.0 \
+  -f x11grab -draw_mouse 1 -video_size "${WIDTH}x${HEIGHT}" -framerate "${FRAMERATE}" -i :99.0 \
   -vf format=yuv420p \
   -c:v libvpx -deadline realtime -cpu-used 8 \
   -g "$((FRAMERATE * 2))" -keyint_min "$((FRAMERATE * 2))" \
