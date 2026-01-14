@@ -118,7 +118,7 @@ export class ContainerManager {
             const containerName = `conclave-browser-${this.sanitizeContainerName(roomId)}`;
             const containerEnv = [
                 `START_URL=${url}`,
-                "RESOLUTION=1280x720x24",
+                "RESOLUTION=1024x576x24",
             ];
 
             if (audioTarget?.ip && audioTarget?.port) {
