@@ -116,7 +116,7 @@ function MobileJoinScreen({
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
-  const { data: session, isPending: isSessionLoading } = useSession();
+  const { data: session } = useSession();
   const canSignOut = Boolean(
     session?.user || (user?.id && !user?.id?.startsWith("guest-"))
   );
@@ -312,23 +312,6 @@ function MobileJoinScreen({
     }
     onIsAdminChange(false);
   }, [activeTab, isRoutedRoom, onIsAdminChange]);
-
-  if (isSessionLoading) {
-    return (
-      <div className="flex-1 flex items-center justify-center bg-[#0d0e0d] relative overflow-hidden">
-        <div className="absolute inset-0 acm-bg-dot-grid pointer-events-none" />
-        <div className="relative z-10 flex flex-col items-center gap-4">
-          <Loader2 className="w-6 h-6 text-[#F95F4A] animate-spin" />
-          <span 
-            className="text-xs text-[#FEFCD9]/40 uppercase tracking-widest"
-            style={{ fontFamily: "'PolySans Mono', monospace" }}
-          >
-            Checking session...
-          </span>
-        </div>
-      </div>
-    );
-  }
 
   // Welcome phase
   if (phase === "welcome") {

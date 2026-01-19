@@ -116,6 +116,13 @@ export class ContainerManager {
 
         try {
             const containerName = `conclave-browser-${this.sanitizeContainerName(roomId)}`;
+
+            try {
+                const existingContainer = this.docker.getContainer(containerName);
+                await existingContainer.remove({ force: true });
+            } catch (e) {
+            }
+
             const containerEnv = [
                 `START_URL=${url}`,
                 "RESOLUTION=1280x720x24",
@@ -127,7 +134,7 @@ export class ContainerManager {
                     audioTarget.ip === "0.0.0.0" ||
                     audioTarget.ip === "::1" ||
                     audioTarget.ip === "localhost";
-                const overrideHost = process.env.BROWSER_AUDIO_TARGET_HOST;
+                const overrideHost = process.env.SFU_HOST || process.env.BROWSER_AUDIO_TARGET_HOST;
                 const targetIp = overrideHost || (isLoopback ? "host.docker.internal" : audioTarget.ip);
                 containerEnv.push(`AUDIO_TARGET_IP=${targetIp}`);
                 containerEnv.push(`AUDIO_TARGET_PORT=${audioTarget.port}`);
@@ -142,7 +149,7 @@ export class ContainerManager {
                     videoTarget.ip === "0.0.0.0" ||
                     videoTarget.ip === "::1" ||
                     videoTarget.ip === "localhost";
-                const overrideHost = process.env.BROWSER_VIDEO_TARGET_HOST || process.env.BROWSER_AUDIO_TARGET_HOST;
+                const overrideHost = process.env.SFU_HOST || process.env.BROWSER_VIDEO_TARGET_HOST || process.env.BROWSER_AUDIO_TARGET_HOST;
                 const targetIp = overrideHost || (isLoopback ? "host.docker.internal" : videoTarget.ip);
                 containerEnv.push(`VIDEO_TARGET_IP=${targetIp}`);
                 containerEnv.push(`VIDEO_TARGET_PORT=${videoTarget.port}`);
@@ -157,7 +164,7 @@ export class ContainerManager {
                 Env: containerEnv,
                 HostConfig: {
                     PortBindings: {
-                        "6080/tcp": [{ HostPort: port.toString() }],
+                        "6080/tcp": [{ HostIp: "0.0.0.0", HostPort: port.toString() }],
                     },
                     AutoRemove: true,
                     ExtraHosts: ["host.docker.internal:host-gateway"],

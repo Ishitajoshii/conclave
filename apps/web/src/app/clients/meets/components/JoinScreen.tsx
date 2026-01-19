@@ -125,7 +125,7 @@ function JoinScreen({
       ? inlineSuggestion.slice(currentSegment.length)
       : "";
 
-  const { data: session, isPending: isSessionLoading } = useSession();
+  const { data: session } = useSession();
   const lastAppliedSessionUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -321,63 +321,48 @@ function JoinScreen({
     <div className="flex-1 flex flex-col relative overflow-hidden">
       <div className="absolute inset-0 acm-bg-dot-grid pointer-events-none" />
 
-      {isSessionLoading && (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-4">
-            <Loader2 className="w-6 h-6 text-[#F95F4A] animate-spin" />
-            <span
-              className="text-xs text-[#FEFCD9]/40 uppercase tracking-widest"
-              style={{ fontFamily: "'PolySans Mono', monospace" }}
-            >
-              Checking session...
-            </span>
-          </div>
-        </div>
-      )}
-
-      {!isSessionLoading && (
-        <div className="flex-1 flex items-center justify-center p-6 relative z-10">
-          {phase === "welcome" && (
-            <div className="flex flex-col items-center justify-center animate-fade-in">
-              <div className="text-center mb-8">
-                <div
-                  className="hidden md:block text-2xl text-[#FEFCD9]/40 mb-2 tracking-wide"
-                  style={{ fontFamily: "'PolySans Bulky Wide', sans-serif" }}
-                >
-                  welcome to
-                </div>
-
-                <div className="relative inline-block">
-                  <span
-                    className="absolute -left-8 top-1/2 -translate-y-1/2 text-[#F95F4A]/40 text-4xl"
-                    style={{ fontFamily: "'PolySans Mono', monospace" }}
-                  >
-                    [
-                  </span>
-                  <h1
-                    className="text-5xl md:text-6xl text-[#FEFCD9] tracking-tight"
-                    style={{ fontFamily: "'PolySans Bulky Wide', sans-serif" }}
-                  >
-                    c0nclav3
-                  </h1>
-                  <span
-                    className="absolute -right-8 top-1/2 -translate-y-1/2 text-[#F95F4A]/40 text-4xl"
-                    style={{ fontFamily: "'PolySans Mono', monospace" }}
-                  >
-                    ]
-                  </span>
-                </div>
+      <div className="flex-1 flex items-center justify-center p-6 relative z-10">
+        {phase === "welcome" && (
+          <div className="flex flex-col items-center justify-center animate-fade-in">
+            <div className="text-center mb-8">
+              <div
+                className="hidden md:block text-2xl text-[#FEFCD9]/40 mb-2 tracking-wide"
+                style={{ fontFamily: "'PolySans Bulky Wide', sans-serif" }}
+              >
+                welcome to
               </div>
 
-              <p
-                className="text-[#FEFCD9]/30 text-sm mb-12 max-w-xs text-center"
-                style={{ fontFamily: "'PolySans Trial', sans-serif" }}
-              >
-                ACM-VIT's in-house video conferencing platform
-              </p>
+              <div className="relative inline-block">
+                <span
+                  className="absolute -left-8 top-1/2 -translate-y-1/2 text-[#F95F4A]/40 text-4xl"
+                  style={{ fontFamily: "'PolySans Mono', monospace" }}
+                >
+                  [
+                </span>
+                <h1
+                  className="text-5xl md:text-6xl text-[#FEFCD9] tracking-tight"
+                  style={{ fontFamily: "'PolySans Bulky Wide', sans-serif" }}
+                >
+                  c0nclav3
+                </h1>
+                <span
+                  className="absolute -right-8 top-1/2 -translate-y-1/2 text-[#F95F4A]/40 text-4xl"
+                  style={{ fontFamily: "'PolySans Mono', monospace" }}
+                >
+                  ]
+                </span>
+              </div>
+            </div>
 
-              <button
-                onClick={() => setPhase("auth")}
+            <p
+              className="text-[#FEFCD9]/30 text-sm mb-12 max-w-xs text-center"
+              style={{ fontFamily: "'PolySans Trial', sans-serif" }}
+            >
+              ACM-VIT's in-house video conferencing platform
+            </p>
+
+            <button
+              onClick={() => setPhase("auth")}
                 className="group flex items-center gap-3 px-8 py-3 bg-[#F95F4A] text-white text-xs uppercase tracking-widest rounded-lg hover:bg-[#e8553f] transition-all hover:gap-4"
                 style={{ fontFamily: "'PolySans Mono', monospace" }}
               >
@@ -473,10 +458,9 @@ function JoinScreen({
           )}
 
           {phase === "join" && (
-            <div className="w-full max-w-4xl flex flex-col lg:flex-row gap-6 lg:gap-8 animate-fade-in">
-
-              <div className="flex-1 flex flex-col">
-                <div className="relative aspect-video lg:aspect-[4/3] bg-[#0d0e0d] rounded-xl overflow-hidden border border-[#FEFCD9]/10 shadow-2xl">
+            <div className="w-full max-w-6xl grid gap-6 lg:gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] items-start animate-fade-in">
+              <div className="flex flex-col lg:pr-2">
+                <div className="relative aspect-video lg:aspect-[16/10] bg-[#0d0e0d] rounded-2xl overflow-hidden border border-[#FEFCD9]/10 shadow-2xl">
                   {isCameraOn && localStream ? (
                     <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover scale-x-[-1]" />
                   ) : (
@@ -538,7 +522,8 @@ function JoinScreen({
 
               </div>
 
-              <div className="w-full lg:w-80 flex flex-col">
+              <div className="w-full lg:w-auto">
+                <div className="flex flex-col rounded-2xl border border-[#FEFCD9]/10 bg-[#141414]/80 backdrop-blur-sm p-5 shadow-[0_20px_45px_rgba(0,0,0,0.35)]">
                 {!isRoutedRoom && (
                   <div className="flex mb-6 bg-[#1a1a1a] rounded-lg p-1">
                     <button
@@ -711,11 +696,11 @@ function JoinScreen({
                     />
                   </div>
                 )}
+                </div>
               </div>
             </div>
           )}
         </div>
-      )}
 
       {/* {!isSessionLoading && phase === "join" && isAdmin && rooms.length > 0 && (
         <div className="border-t border-[#FEFCD9]/5 bg-[#0d0e0d]/50 px-6 py-4 relative z-10">
