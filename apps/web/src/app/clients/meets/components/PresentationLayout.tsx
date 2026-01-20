@@ -69,7 +69,7 @@ function PresentationLayout({
 
   return (
     <div className="flex flex-1 gap-4 overflow-hidden">
-      <div className="flex-1 bg-[#1a1a1a] border border-[#FEFCD9]/10 rounded-xl overflow-hidden relative flex items-center justify-center">
+      <div className="flex-1 bg-[#252525] border border-white/5 rounded-lg overflow-hidden relative flex items-center justify-center">
         <video
           ref={presentationVideoRef}
           autoPlay
@@ -77,17 +77,16 @@ function PresentationLayout({
           className="max-w-full max-h-full"
         />
         <div
-          className="absolute top-3 left-3 bg-[#0d0e0d]/80 backdrop-blur-sm border border-[#FEFCD9]/10 rounded-full px-3 py-1.5 flex items-center gap-2"
-          style={{ fontFamily: "'PolySans Mono', monospace" }}
+          className="absolute top-2 left-2 bg-black/40 px-2 py-1 rounded text-white text-sm tracking-[0.5px]"
+          style={{ fontWeight: 500 }}
         >
-          <span className="text-[10px] uppercase tracking-[0.12em] text-[#FEFCD9]/60">Presenting</span>
-          <span className="text-xs text-[#FEFCD9] font-medium">{presenterName}</span>
+          {presenterName} is presenting
         </div>
       </div>
 
       <div className="w-64 flex flex-col gap-3 overflow-y-auto overflow-x-visible px-1">
         <div
-          className={`relative bg-[#1a1a1a] border border-[#FEFCD9]/10 rounded-xl overflow-hidden h-36 shrink-0 transition-all duration-200 ${getSpeakerHighlightClasses(
+          className={`relative bg-[#252525] border border-white/5 rounded-lg overflow-hidden h-36 shrink-0 transition-all duration-200 ${getSpeakerHighlightClasses(
             isLocalActiveSpeaker
           )}`}
         >
@@ -109,11 +108,8 @@ function PresentationLayout({
           {isGhost && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="flex flex-col items-center gap-1.5">
-                <Ghost className="w-12 h-12 text-[#FF007A] drop-shadow-[0_0_18px_rgba(255,0,122,0.45)]" />
-                <span
-                  className="text-[10px] text-[#FF007A]/90 bg-black/60 border border-[#FF007A]/30 px-2 py-0.5 rounded-full uppercase tracking-[0.12em]"
-                  style={{ fontFamily: "'PolySans Mono', monospace" }}
-                >
+                <Ghost className="w-12 h-12 text-blue-300 drop-shadow-[0_0_18px_rgba(59,130,246,0.45)]" />
+                <span className="text-[10px] text-blue-200/90 bg-black/60 border border-blue-400/30 px-2 py-0.5 rounded-full">
                   Ghost
                 </span>
               </div>
@@ -121,7 +117,7 @@ function PresentationLayout({
           )}
           {isHandRaised && (
             <div
-              className="absolute top-3 left-3 p-1.5 rounded-full bg-[#F95F4A]/20 border border-[#F95F4A]/40 text-[#F95F4A] shadow-[0_0_15px_rgba(249,95,74,0.3)]"
+              className="absolute top-3 left-3 p-1.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 shadow-[0_0_15px_rgba(251,191,36,0.3)]"
               title="Hand raised"
             >
               <Hand className="w-3 h-3" />

@@ -22,6 +22,7 @@ import { useMeetRooms } from "./meets/hooks/useMeetRooms";
 import { useMeetSocket } from "./meets/hooks/useMeetSocket";
 import { useMeetState } from "./meets/hooks/useMeetState";
 import { useIsMobile } from "./meets/hooks/useIsMobile";
+import { useMeetPictureInPicture } from "./meets/hooks/useMeetPictureInPicture";
 import { useSharedBrowser } from "./meets/hooks/useSharedBrowser";
 import type { ParticipantsPanelGetRooms } from "./meets/components/ParticipantsPanel";
 import { sanitizeRoomCode } from "./meets/utils";
@@ -296,6 +297,7 @@ export default function MeetsClient({
     setIsRoomLocked,
     setActiveScreenShareId,
     setVideoQuality,
+    videoQualityRef: refs.videoQualityRef,
     updateVideoQualityRef,
     requestMediaPermissions,
     stopLocalTrack,
@@ -456,6 +458,20 @@ export default function MeetsClient({
     participants,
     resolveDisplayName,
   ]);
+
+  // Picture-in-Picture for when user tabs away
+  useMeetPictureInPicture({
+    isJoined: connectionState === "joined",
+    localStream,
+    participants,
+    activeSpeakerId,
+    presentationStream,
+    presenterName,
+    currentUserId: userId,
+    isCameraOff,
+    userEmail,
+    getDisplayName: resolveDisplayName,
+  });
 
   // ============================================
   // Render Helpers
