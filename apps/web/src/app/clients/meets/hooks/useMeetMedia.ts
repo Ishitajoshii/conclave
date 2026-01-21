@@ -3,8 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
 import {
+  DEFAULT_AUDIO_CONSTRAINTS,
   LOW_QUALITY_CONSTRAINTS,
+  LOW_VIDEO_MAX_BITRATE,
+  OPUS_MAX_AVERAGE_BITRATE,
   STANDARD_QUALITY_CONSTRAINTS,
+  STANDARD_VIDEO_MAX_BITRATE,
 } from "../constants";
 import type {
   MediaState,
@@ -87,6 +91,13 @@ export function useMeetMedia({
   const updateVideoQualityRef = useRef<
     (quality: VideoQuality) => Promise<void>
   >(async () => {});
+  const buildAudioConstraints = useCallback(
+    (deviceId?: string): MediaTrackConstraints => ({
+      ...DEFAULT_AUDIO_CONSTRAINTS,
+      ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+    }),
+    []
+  );
 
   const getAudioContext = useCallback(() => {
     const AudioContextConstructor =
@@ -241,10 +252,9 @@ export function useMeetMedia({
           ? { ...LOW_QUALITY_CONSTRAINTS }
           : { ...STANDARD_QUALITY_CONSTRAINTS };
 
-      const audioConstraints: boolean | MediaTrackConstraints =
+      const audioConstraints = buildAudioConstraints(
         selectedAudioInputDeviceId
-          ? { deviceId: { exact: selectedAudioInputDeviceId } }
-          : true;
+      );
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: audioConstraints,
@@ -264,6 +274,11 @@ export function useMeetMedia({
           }
         };
       });
+      stream.getVideoTracks().forEach((track) => {
+        if ("contentHint" in track) {
+          track.contentHint = "motion";
+        }
+      });
 
       return stream;
     } catch (err) {
@@ -279,10 +294,9 @@ export function useMeetMedia({
         meetErr.code === "MEDIA_ERROR"
       ) {
         try {
-          const audioOnlyConstraints: boolean | MediaTrackConstraints =
+          const audioOnlyConstraints = buildAudioConstraints(
             selectedAudioInputDeviceId
-              ? { deviceId: { exact: selectedAudioInputDeviceId } }
-              : true;
+          );
 
           const audioStream = await navigator.mediaDevices.getUserMedia({
             audio: audioOnlyConstraints,
@@ -316,6 +330,7 @@ export function useMeetMedia({
     selectedAudioInputDeviceId,
     isCameraOff,
     handleLocalTrackEnded,
+    buildAudioConstraints,
     permissionHintTimeoutRef,
     setMeetError,
     setIsCameraOff,
@@ -329,7 +344,7 @@ export function useMeetMedia({
       if (connectionState === "joined") {
         try {
           const newStream = await navigator.mediaDevices.getUserMedia({
-            audio: { deviceId: { exact: deviceId } },
+            audio: buildAudioConstraints(deviceId),
           });
 
           const newAudioTrack = newStream.getAudioTracks()[0];
@@ -374,6 +389,7 @@ export function useMeetMedia({
       setSelectedAudioInputDeviceId,
       audioProducerRef,
       setLocalStream,
+      buildAudioConstraints,
     ]
   );
 
@@ -448,6 +464,9 @@ export function useMeetMedia({
           video: constraints,
         });
         const newVideoTrack = newStream.getVideoTracks()[0];
+        if (newVideoTrack && "contentHint" in newVideoTrack) {
+          newVideoTrack.contentHint = "motion";
+        }
         newVideoTrack.onended = () => {
           handleLocalTrackEnded("video", newVideoTrack);
         };
@@ -538,13 +557,8 @@ export function useMeetMedia({
       const transport = producerTransportRef.current;
       if (!transport) return;
 
-      const audioConstraints: boolean | MediaTrackConstraints =
-        selectedAudioInputDeviceId
-          ? { deviceId: { exact: selectedAudioInputDeviceId } }
-          : true;
-
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraints,
+        audio: buildAudioConstraints(selectedAudioInputDeviceId),
       });
       const audioTrack = stream.getAudioTracks()[0];
 
@@ -579,6 +593,12 @@ export function useMeetMedia({
       } else {
         const audioProducer = await transport.produce({
           track: audioTrack,
+          codecOptions: {
+            opusStereo: true,
+            opusFec: true,
+            opusDtx: true,
+            opusMaxAverageBitrate: OPUS_MAX_AVERAGE_BITRATE,
+          },
           appData: { type: "webcam" as ProducerType, paused: false },
         });
 
@@ -600,6 +620,7 @@ export function useMeetMedia({
     selectedAudioInputDeviceId,
     handleLocalTrackEnded,
     stopLocalTrack,
+    buildAudioConstraints,
     socketRef,
     audioProducerRef,
     localStreamRef,
@@ -607,6 +628,7 @@ export function useMeetMedia({
     producerTransportRef,
     setIsMuted,
     setMeetError,
+    OPUS_MAX_AVERAGE_BITRATE,
   ]);
 
   const toggleCamera = useCallback(async () => {
@@ -688,6 +710,9 @@ export function useMeetMedia({
         const videoTrack = stream.getVideoTracks()[0];
 
         if (!videoTrack) throw new Error("No video track obtained");
+        if ("contentHint" in videoTrack) {
+          videoTrack.contentHint = "motion";
+        }
         videoTrack.onended = () => {
           handleLocalTrackEnded("video", videoTrack);
         };
@@ -705,9 +730,13 @@ export function useMeetMedia({
           return new MediaStream([videoTrack]);
         });
 
+        const maxBitrate =
+          videoQualityRef.current === "low"
+            ? LOW_VIDEO_MAX_BITRATE
+            : STANDARD_VIDEO_MAX_BITRATE;
         const videoProducer = await transport.produce({
           track: videoTrack,
-          encodings: [{ maxBitrate: 500000 }],
+          encodings: [{ maxBitrate }],
           appData: { type: "webcam" as ProducerType, paused: false },
         });
 
@@ -733,6 +762,8 @@ export function useMeetMedia({
     videoQualityRef,
     setIsCameraOff,
     setMeetError,
+    LOW_VIDEO_MAX_BITRATE,
+    STANDARD_VIDEO_MAX_BITRATE,
   ]);
 
   const toggleScreenShare = useCallback(async () => {
@@ -784,6 +815,9 @@ export function useMeetMedia({
         audio: true,
       });
       const track = stream.getVideoTracks()[0];
+      if (track && "contentHint" in track) {
+        track.contentHint = "detail";
+      }
 
       const producer = await transport.produce({
         track,

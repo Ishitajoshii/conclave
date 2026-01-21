@@ -1,6 +1,6 @@
 export const RECONNECT_DELAY_MS = 1000;
 export const MAX_RECONNECT_ATTEMPTS = 8;
-export const SOCKET_TIMEOUT_MS = 10000;
+export const SOCKET_TIMEOUT_MS = 15000;
 export const SPEAKER_CHECK_INTERVAL_MS = 250;
 export const SPEAKER_THRESHOLD = 0.03;
 export const ACTIVE_SPEAKER_HOLD_MS = 900;
@@ -9,16 +9,29 @@ export const MAX_REACTIONS = 30;
 export const EMOJI_REACTIONS = ["👍", "👏", "😂", "❤️", "🎉", "😮"] as const;
 
 export const STANDARD_QUALITY_CONSTRAINTS = {
-  width: { ideal: 640, max: 640 },
-  height: { ideal: 360, max: 360 },
-  frameRate: { ideal: 24, max: 24 },
+  width: { ideal: 1280, max: 1280 },
+  height: { ideal: 720, max: 720 },
+  frameRate: { ideal: 30, max: 30 },
 };
 
 export const LOW_QUALITY_CONSTRAINTS = {
-  width: { ideal: 256, max: 256 },
-  height: { ideal: 144, max: 144 },
-  frameRate: { ideal: 15, max: 15 },
+  width: { ideal: 640, max: 640 },
+  height: { ideal: 360, max: 360 },
+  frameRate: { ideal: 20, max: 24 },
 };
+
+export const DEFAULT_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+  channelCount: { ideal: 2 },
+  sampleRate: { ideal: 48000 },
+  sampleSize: { ideal: 16 },
+};
+
+export const STANDARD_VIDEO_MAX_BITRATE = 1200000;
+export const LOW_VIDEO_MAX_BITRATE = 350000;
+export const OPUS_MAX_AVERAGE_BITRATE = 64000;
 
 export const MEETS_ICE_SERVERS: RTCIceServer[] = (() => {
   const urls = (

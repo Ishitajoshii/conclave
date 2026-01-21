@@ -14,6 +14,10 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { signIn, signOut, useSession } from "@/lib/auth-client";
 import type { ConnectionState, MeetError } from "../../types";
 import {
+  DEFAULT_AUDIO_CONSTRAINTS,
+  STANDARD_QUALITY_CONSTRAINTS,
+} from "../../constants";
+import {
   generateRoomCode,
   ROOM_CODE_MAX_LENGTH,
   extractRoomCode,
@@ -188,9 +192,14 @@ function MobileJoinScreen({
       setIsCameraOn(false);
     } else {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: STANDARD_QUALITY_CONSTRAINTS,
+        });
         const videoTrack = stream.getVideoTracks()[0];
         if (videoTrack) {
+          if ("contentHint" in videoTrack) {
+            videoTrack.contentHint = "motion";
+          }
           if (localStream) {
             localStream.addTrack(videoTrack);
           } else {
@@ -217,7 +226,9 @@ function MobileJoinScreen({
       setIsMicOn(false);
     } else {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: DEFAULT_AUDIO_CONSTRAINTS,
+        });
         const audioTrack = stream.getAudioTracks()[0];
         if (audioTrack) {
           if (localStream) {

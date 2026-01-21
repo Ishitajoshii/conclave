@@ -95,9 +95,8 @@ function PresentationLayout({
             autoPlay
             muted
             playsInline
-            className={`w-full h-full object-cover ${
-              isCameraOff ? "hidden" : ""
-            } ${isMirrorCamera ? "scale-x-[-1]" : ""}`}
+            className={`w-full h-full object-cover ${isCameraOff ? "hidden" : ""
+              } ${isMirrorCamera ? "scale-x-[-1]" : ""}`}
           />
           {isCameraOff && (
             <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#1a1a1a] to-[#0d0e0d]">
@@ -135,15 +134,15 @@ function PresentationLayout({
         {Array.from(participants.values())
           .filter((participant) => !isSystemUserId(participant.userId))
           .map((participant) => (
-          <ParticipantVideo
-            key={participant.userId}
-            participant={participant}
-            displayName={getDisplayName(participant.userId)}
-            isActiveSpeaker={activeSpeakerId === participant.userId}
-            compact
-            audioOutputDeviceId={audioOutputDeviceId}
-          />
-        ))}
+            <ParticipantVideo
+              key={participant.userId}
+              participant={participant}
+              displayName={getDisplayName(participant.userId)}
+              isActiveSpeaker={activeSpeakerId === participant.userId}
+              compact
+              audioOutputDeviceId={audioOutputDeviceId}
+            />
+          ))}
       </div>
     </div>
   );

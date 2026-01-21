@@ -18,6 +18,10 @@ import { signIn, useSession } from "@/lib/auth-client";
 import type { RoomInfo } from "@/lib/sfu-types";
 import type { ConnectionState, MeetError } from "../types";
 import {
+  DEFAULT_AUDIO_CONSTRAINTS,
+  STANDARD_QUALITY_CONSTRAINTS,
+} from "../constants";
+import {
   generateRoomCode,
   ROOM_CODE_MAX_LENGTH,
   extractRoomCode,
@@ -200,9 +204,14 @@ function JoinScreen({
     } else {
       // Turn on camera - acquire new video track
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: STANDARD_QUALITY_CONSTRAINTS,
+        });
         const videoTrack = stream.getVideoTracks()[0];
         if (videoTrack) {
+          if ("contentHint" in videoTrack) {
+            videoTrack.contentHint = "motion";
+          }
           if (localStream) {
             localStream.addTrack(videoTrack);
           } else {
@@ -231,7 +240,9 @@ function JoinScreen({
     } else {
       // Turn on mic - acquire new audio track
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: DEFAULT_AUDIO_CONSTRAINTS,
+        });
         const audioTrack = stream.getAudioTracks()[0];
         if (audioTrack) {
           if (localStream) {

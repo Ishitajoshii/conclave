@@ -1,16 +1,13 @@
 "use client";
 
-import { Roboto } from "next/font/google";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RoomInfo } from "@/lib/sfu-types";
 import { signOut } from "@/lib/auth-client";
-import {
-  MeetsErrorBanner,
-  MeetsHeader,
-  MeetsMainContent,
-  MeetsWaitingScreen,
-} from "./meets/components";
-import { MobileMeetsMainContent } from "./meets/components/mobile";
+import MeetsErrorBanner from "./meets/components/MeetsErrorBanner";
+import MeetsHeader from "./meets/components/MeetsHeader";
+import MeetsMainContent from "./meets/components/MeetsMainContent";
+import MeetsWaitingScreen from "./meets/components/MeetsWaitingScreen";
+import MobileMeetsMainContent from "./meets/components/mobile/MobileMeetsMainContent";
 import { useMeetAudioActivity } from "./meets/hooks/useMeetAudioActivity";
 import { useMeetChat } from "./meets/hooks/useMeetChat";
 import { useMeetDisplayName } from "./meets/hooks/useMeetDisplayName";
@@ -25,16 +22,10 @@ import { useMeetRooms } from "./meets/hooks/useMeetRooms";
 import { useMeetSocket } from "./meets/hooks/useMeetSocket";
 import { useMeetState } from "./meets/hooks/useMeetState";
 import { useIsMobile } from "./meets/hooks/useIsMobile";
+import { useMeetPictureInPicture } from "./meets/hooks/useMeetPictureInPicture";
 import { useSharedBrowser } from "./meets/hooks/useSharedBrowser";
 import type { ParticipantsPanelGetRooms } from "./meets/components/ParticipantsPanel";
 import { sanitizeRoomCode } from "./meets/utils";
-
-const roboto = Roboto({
-  subsets: ["latin"],
-  weight: ["400", "500", "700"],
-  display: "swap",
-  variable: "--font-roboto",
-});
 
 // ============================================
 // Main Component
@@ -45,6 +36,7 @@ export type MeetsClientProps = {
   enableRoomRouting?: boolean;
   forceJoinOnly?: boolean;
   allowGhostMode?: boolean;
+  fontClassName?: string;
   user?: {
     id?: string;
     email?: string | null;
@@ -72,6 +64,7 @@ export default function MeetsClient({
   enableRoomRouting = false,
   forceJoinOnly = false,
   allowGhostMode = true,
+  fontClassName,
   user,
   isAdmin = false,
   getJoinInfo,
@@ -304,6 +297,7 @@ export default function MeetsClient({
     setIsRoomLocked,
     setActiveScreenShareId,
     setVideoQuality,
+    videoQualityRef: refs.videoQualityRef,
     updateVideoQualityRef,
     requestMediaPermissions,
     stopLocalTrack,
@@ -475,27 +469,51 @@ export default function MeetsClient({
     return new MediaStream([screenTrack]);
   }, [screenTrack]);
 
+  const { presentationStream, presenterName } = useMemo(() => {
+    let nextStream: MediaStream | null = null;
+    let nextPresenterName = "";
+
+    if (isScreenSharing && localScreenShareStream) {
+      nextStream = localScreenShareStream;
+      nextPresenterName = "You";
+    } else if (activeScreenShareId) {
+      for (const participant of participants.values()) {
+        if (participant.screenShareStream) {
+          nextStream = participant.screenShareStream;
+          nextPresenterName = resolveDisplayName(participant.userId);
+          break;
+        }
+      }
+    }
+
+    return { presentationStream: nextStream, presenterName: nextPresenterName };
+  }, [
+    activeScreenShareId,
+    isScreenSharing,
+    localScreenShareStream,
+    participants,
+    resolveDisplayName,
+  ]);
+
+  // Picture-in-Picture for when user tabs away
+  useMeetPictureInPicture({
+    isJoined: connectionState === "joined",
+    localStream,
+    participants,
+    activeSpeakerId,
+    presentationStream,
+    presenterName,
+    currentUserId: userId,
+    isCameraOff,
+    userEmail,
+    getDisplayName: resolveDisplayName,
+  });
+
   // ============================================
   // Render Helpers
   // ============================================
 
   if (!mounted) return null;
-
-  let presentationStream: MediaStream | null = null;
-  let presenterName = "";
-
-  if (isScreenSharing && localScreenShareStream) {
-    presentationStream = localScreenShareStream;
-    presenterName = "You";
-  } else if (activeScreenShareId) {
-    for (const p of participants.values()) {
-      if (p.screenShareStream) {
-        presentationStream = p.screenShareStream;
-        presenterName = resolveDisplayName(p.userId);
-        break;
-      }
-    }
-  }
 
   const isJoined = connectionState === "joined";
   const isLoading =
@@ -562,8 +580,7 @@ export default function MeetsClient({
   if (isMobile) {
     return (
       <div
-        className={`flex flex-col h-dvh w-full bg-[#0d0e0d] text-white ${roboto.className}`}
-        style={{ fontFamily: "'Roboto', sans-serif" }}
+        className={`flex flex-col h-dvh w-full bg-[#0d0e0d] text-white ${fontClassName ?? ""}`}
       >
         {renderMinutesPrompt}
         {isJoined && meetError && (
@@ -667,8 +684,7 @@ export default function MeetsClient({
   // Desktop layout
   return (
     <div
-      className={`flex flex-col h-full w-full bg-[#1a1a1a] text-white ${roboto.className}`}
-      style={{ fontFamily: "'Roboto', sans-serif" }}
+      className={`flex flex-col h-full w-full bg-[#1a1a1a] text-white ${fontClassName ?? ""}`}
     >
       {renderMinutesPrompt}
       <MeetsHeader

@@ -1,13 +1,16 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
-import { io, type Socket } from "socket.io-client";
-import { Device } from "mediasoup-client";
+import type { Socket } from "socket.io-client";
+import type { Device } from "mediasoup-client";
 import {
   MAX_RECONNECT_ATTEMPTS,
   MEETS_ICE_SERVERS,
+  LOW_VIDEO_MAX_BITRATE,
+  OPUS_MAX_AVERAGE_BITRATE,
   RECONNECT_DELAY_MS,
   SOCKET_TIMEOUT_MS,
+  STANDARD_VIDEO_MAX_BITRATE,
 } from "../constants";
 import type {
   ChatMessage,
@@ -21,6 +24,8 @@ import type {
   ProducerType,
   ReactionNotification,
   ReactionPayload,
+  DtlsParameters,
+  RtpParameters,
   TransportResponse,
   VideoQuality,
 } from "../types";
@@ -66,6 +71,7 @@ interface UseMeetSocketOptions {
   setIsRoomLocked: (value: boolean) => void;
   setActiveScreenShareId: (value: string | null) => void;
   setVideoQuality: (value: VideoQuality) => void;
+  videoQualityRef: React.MutableRefObject<VideoQuality>;
   updateVideoQualityRef: React.MutableRefObject<
     (quality: VideoQuality) => Promise<void>
   >;
@@ -112,6 +118,7 @@ export function useMeetSocket({
   setIsRoomLocked,
   setActiveScreenShareId,
   setVideoQuality,
+  videoQualityRef,
   updateVideoQualityRef,
   requestMediaPermissions,
   stopLocalTrack,
@@ -346,20 +353,39 @@ export function useMeetSocket({
                 : undefined,
             });
 
-            transport.on("connect", ({ dtlsParameters }, callback, errback) => {
-              socket.emit(
-                "connectProducerTransport",
-                { transportId: transport.id, dtlsParameters },
-                (res: { success: boolean } | { error: string }) => {
-                  if ("error" in res) errback(new Error(res.error));
-                  else callback();
-                }
-              );
-            });
+            transport.on(
+              "connect",
+              (
+                { dtlsParameters }: { dtlsParameters: DtlsParameters },
+                callback: () => void,
+                errback: (error: Error) => void
+              ) => {
+                socket.emit(
+                  "connectProducerTransport",
+                  { transportId: transport.id, dtlsParameters },
+                  (res: { success: boolean } | { error: string }) => {
+                    if ("error" in res) errback(new Error(res.error));
+                    else callback();
+                  }
+                );
+              }
+            );
 
             transport.on(
               "produce",
-              ({ kind, rtpParameters, appData }, callback, errback) => {
+              (
+                {
+                  kind,
+                  rtpParameters,
+                  appData,
+                }: {
+                  kind: "audio" | "video";
+                  rtpParameters: RtpParameters;
+                  appData: unknown;
+                },
+                callback: (data: { id: string }) => void,
+                errback: (error: Error) => void
+              ) => {
                 socket.emit(
                   "produce",
                   { transportId: transport.id, kind, rtpParameters, appData },
@@ -371,14 +397,25 @@ export function useMeetSocket({
               }
             );
 
-            transport.on("connectionstatechange", (state) => {
+            transport.on("connectionstatechange", (state: string) => {
               console.log("[Meets] Producer transport state:", state);
-              if (state === "failed" || state === "closed") {
-                setMeetError({
-                  code: "TRANSPORT_ERROR",
-                  message: "Producer transport failed",
-                  recoverable: true,
-                });
+              if (state === "failed" || state === "disconnected") {
+                if (!intentionalDisconnectRef.current) {
+                  setMeetError({
+                    code: "TRANSPORT_ERROR",
+                    message: "Producer transport interrupted",
+                    recoverable: true,
+                  });
+                  handleReconnectRef.current?.();
+                }
+              } else if (state === "closed") {
+                if (!intentionalDisconnectRef.current) {
+                  setMeetError({
+                    code: "TRANSPORT_ERROR",
+                    message: "Producer transport closed",
+                    recoverable: true,
+                  });
+                }
               }
             });
 
@@ -388,7 +425,7 @@ export function useMeetSocket({
         );
       });
     },
-    [producerTransportRef, setMeetError]
+    [producerTransportRef, setMeetError, handleReconnectRef, intentionalDisconnectRef]
   );
 
   const createConsumerTransport = useCallback(
@@ -409,19 +446,31 @@ export function useMeetSocket({
                 : undefined,
             });
 
-            transport.on("connect", ({ dtlsParameters }, callback, errback) => {
-              socket.emit(
-                "connectConsumerTransport",
-                { transportId: transport.id, dtlsParameters },
-                (res: { success: boolean } | { error: string }) => {
-                  if ("error" in res) errback(new Error(res.error));
-                  else callback();
-                }
-              );
-            });
+            transport.on(
+              "connect",
+              (
+                { dtlsParameters }: { dtlsParameters: DtlsParameters },
+                callback: () => void,
+                errback: (error: Error) => void
+              ) => {
+                socket.emit(
+                  "connectConsumerTransport",
+                  { transportId: transport.id, dtlsParameters },
+                  (res: { success: boolean } | { error: string }) => {
+                    if ("error" in res) errback(new Error(res.error));
+                    else callback();
+                  }
+                );
+              }
+            );
 
-            transport.on("connectionstatechange", (state) => {
+            transport.on("connectionstatechange", (state: string) => {
               console.log("[Meets] Consumer transport state:", state);
+              if (state === "failed" || state === "disconnected") {
+                if (!intentionalDisconnectRef.current) {
+                  handleReconnectRef.current?.();
+                }
+              }
             });
 
             consumerTransportRef.current = transport;
@@ -430,7 +479,7 @@ export function useMeetSocket({
         );
       });
     },
-    [consumerTransportRef]
+    [consumerTransportRef, handleReconnectRef, intentionalDisconnectRef]
   );
 
   const produce = useCallback(
@@ -443,6 +492,12 @@ export function useMeetSocket({
         try {
           const audioProducer = await transport.produce({
             track: audioTrack,
+            codecOptions: {
+              opusStereo: true,
+              opusFec: true,
+              opusDtx: true,
+              opusMaxAverageBitrate: OPUS_MAX_AVERAGE_BITRATE,
+            },
             appData: { type: "webcam" as ProducerType, paused: isMuted },
           });
 
@@ -463,9 +518,13 @@ export function useMeetSocket({
       const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack) {
         try {
+          const maxBitrate =
+            videoQualityRef.current === "low"
+              ? LOW_VIDEO_MAX_BITRATE
+              : STANDARD_VIDEO_MAX_BITRATE;
           const videoProducer = await transport.produce({
             track: videoTrack,
-            encodings: [{ maxBitrate: 500000 }],
+            encodings: [{ maxBitrate }],
             appData: { type: "webcam" as ProducerType, paused: isCameraOff },
           });
 
@@ -483,7 +542,14 @@ export function useMeetSocket({
         }
       }
     },
-    [producerTransportRef, audioProducerRef, videoProducerRef, isMuted, isCameraOff]
+    [
+      producerTransportRef,
+      audioProducerRef,
+      videoProducerRef,
+      isMuted,
+      isCameraOff,
+      videoQualityRef,
+    ]
   );
 
   const consumeProducer = useCallback(
@@ -676,6 +742,7 @@ export function useMeetSocket({
               );
               currentRoomIdRef.current = targetRoomId;
 
+              const { Device } = await import("mediasoup-client");
               const device = new Device();
               await device.load({
                 routerRtpCapabilities: response.rtpCapabilities,
@@ -746,12 +813,14 @@ export function useMeetSocket({
               throw new Error("Missing room ID");
             }
 
+            const socketIoPromise = import("socket.io-client");
             const { token, sfuUrl } = await getJoinInfo(
               roomIdForJoin,
               sessionIdRef.current,
               { user, isHost: isAdmin }
             );
 
+            const { io } = await socketIoPromise;
             const socket = io(sfuUrl, {
               transports: ["websocket", "polling"],
               timeout: SOCKET_TIMEOUT_MS,
