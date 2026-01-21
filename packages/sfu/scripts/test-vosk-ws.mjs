@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
 
-const WS_URL = 'ws://localhost:2700';
+const WS_URL = 'ws://127.0.0.1:2800';
 const ws = new WebSocket(WS_URL);
 
 ws.on('open', () => {
