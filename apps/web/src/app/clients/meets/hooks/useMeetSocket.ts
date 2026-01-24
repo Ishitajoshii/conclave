@@ -10,6 +10,7 @@ import {
   OPUS_MAX_AVERAGE_BITRATE,
   RECONNECT_DELAY_MS,
   SOCKET_TIMEOUT_MS,
+  SOCKET_CONNECT_TIMEOUT_MS,
   STANDARD_VIDEO_MAX_BITRATE,
   TRANSPORT_DISCONNECT_GRACE_MS,
   PRODUCER_SYNC_INTERVAL_MS,
@@ -97,6 +98,11 @@ interface UseMeetSocketOptions {
     displayName: string;
     text: string;
   }) => void;
+  prewarm?: {
+    Device: typeof import("mediasoup-client").Device | null;
+    io: typeof import("socket.io-client").io | null;
+    isReady: boolean;
+  };
 }
 
 export function useMeetSocket({
@@ -138,6 +144,7 @@ export function useMeetSocket({
   clearReactions,
   chat,
   onTtsMessage,
+  prewarm,
 }: UseMeetSocketOptions) {
   const {
     socketRef,
@@ -979,18 +986,26 @@ export function useMeetSocket({
             }
 
             try {
+              const joinedTime = performance.now();
               console.log(
                 "[Meets] Joined room, existing producers:",
                 response.existingProducers
               );
               currentRoomIdRef.current = targetRoomId;
 
-              const { Device } = await import("mediasoup-client");
-              const device = new Device();
+              // Use pre-warmed Device if available, otherwise dynamic import
+              const DeviceClass = prewarm?.Device
+                ? prewarm.Device
+                : (await import("mediasoup-client")).Device;
+
+              const device = new DeviceClass();
               await device.load({
                 routerRtpCapabilities: response.rtpCapabilities,
               });
               deviceRef.current = device;
+              console.log(
+                `[Meets] Device loaded in ${(performance.now() - joinedTime).toFixed(0)}ms`
+              );
 
               const shouldProduce = !!stream && !joinOptions.isGhost;
 
@@ -1060,14 +1075,20 @@ export function useMeetSocket({
               throw new Error("Missing room ID");
             }
 
-            const socketIoPromise = import("socket.io-client");
-            const { token, sfuUrl } = await getJoinInfo(
-              roomIdForJoin,
-              sessionIdRef.current,
-              { user, isHost: isAdmin }
-            );
+            const joinStartTime = performance.now();
 
-            const { io } = await socketIoPromise;
+            const socketIoPromise = prewarm?.io
+              ? Promise.resolve({ io: prewarm.io })
+              : import("socket.io-client");
+
+            const [{ token, sfuUrl }, { io }] = await Promise.all([
+              getJoinInfo(roomIdForJoin, sessionIdRef.current, {
+                user,
+                isHost: isAdmin,
+              }),
+              socketIoPromise,
+            ]);
+
             const socket = io(sfuUrl, {
               transports: ["websocket", "polling"],
               timeout: SOCKET_TIMEOUT_MS,
@@ -1078,11 +1099,13 @@ export function useMeetSocket({
             const connectionTimeout = setTimeout(() => {
               socket.disconnect();
               reject(new Error("Connection timeout"));
-            }, SOCKET_TIMEOUT_MS);
+            }, SOCKET_CONNECT_TIMEOUT_MS);
 
             socket.on("connect", () => {
               clearTimeout(connectionTimeout);
-              console.log("[Meets] Connected to SFU");
+              console.log(
+                `[Meets] Connected to SFU in ${(performance.now() - joinStartTime).toFixed(0)}ms`
+              );
               setConnectionState("connected");
               setMeetError(null);
               reconnectAttemptsRef.current = 0;

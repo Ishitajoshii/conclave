@@ -20,6 +20,7 @@ import { useMeetReactions } from "./meets/hooks/useMeetReactions";
 import { useMeetRefs } from "./meets/hooks/useMeetRefs";
 import { useMeetRooms } from "./meets/hooks/useMeetRooms";
 import { useMeetSocket } from "./meets/hooks/useMeetSocket";
+import { usePrewarmSocket } from "./meets/hooks/usePrewarmSocket";
 import { useMeetState } from "./meets/hooks/useMeetState";
 import { useIsMobile } from "./meets/hooks/useIsMobile";
 import { useMeetPictureInPicture } from "./meets/hooks/useMeetPictureInPicture";
@@ -76,6 +77,8 @@ export default function MeetsClient({
   const [currentUser, setCurrentUser] = useState(user);
   const [currentIsAdmin, setCurrentIsAdmin] = useState(isAdmin);
   const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const prewarm = usePrewarmSocket();
 
   const refs = useMeetRefs();
   const {
@@ -359,6 +362,7 @@ export default function MeetsClient({
       isChatOpenRef,
     },
     onTtsMessage: handleTtsMessage,
+    prewarm,
   });
 
   useMeetAudioActivity({
