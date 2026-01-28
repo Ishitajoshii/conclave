@@ -228,7 +228,10 @@ export function JoinScreen({
       });
       if (!response.ok) {
         const text = await response.text().catch(() => "");
-        throw new Error(text || "Sign in request failed");
+        const details = text
+          ? `Sign in request failed: ${text}`
+          : `Sign in request failed (${response.status})`;
+        throw new Error(details);
       }
       const data = (await response.json().catch(() => null)) as
         | {
@@ -345,7 +348,11 @@ export function JoinScreen({
             keyboardShouldPersistTaps="handled"
           >
             <Animated.View entering={FadeIn.duration(600)} style={styles.centerItems}>
-              <Text style={[styles.welcomeLabel, { color: COLORS.creamLight }]}>
+              <Text
+                numberOfLines={1}
+                ellipsizeMode="clip"
+                style={[styles.welcomeLabel, { color: COLORS.creamLight }]}
+              >
                 welcome to
               </Text>
 
@@ -372,7 +379,9 @@ export function JoinScreen({
                 }}
                 style={[styles.primaryButton, { backgroundColor: COLORS.primaryOrange }]}
               >
-                <Text style={styles.primaryButtonText}>LET'S GO</Text>
+                <Text numberOfLines={1} ellipsizeMode="clip" style={styles.primaryButtonText}>
+                  LET'S GO
+                </Text>
                 <ArrowRight size={16} color="#FFFFFF" />
               </Pressable>
             </Animated.View>
