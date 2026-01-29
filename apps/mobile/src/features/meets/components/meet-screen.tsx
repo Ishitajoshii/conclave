@@ -16,7 +16,9 @@ import {
   registerCallKeepHandlers,
   setAudioRoute,
   startCallSession,
+  startForegroundCallService,
   startInCall,
+  stopForegroundCallService,
   stopInCall,
 } from "@/lib/call-service";
 import { ensureWebRTCGlobals } from "@/lib/webrtc";
@@ -73,15 +75,8 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
   const { isTablet } = useDeviceLayout();
   const refs = useMeetRefs();
   const isAppActiveRef = useRef(AppState.currentState === "active");
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) => {
-      isAppActiveRef.current = state === "active";
-    });
-    return () => {
-      subscription.remove();
-    };
-  }, []);
+  const wasCameraOnBeforeBackgroundRef = useRef(false);
+  const wasMutedBeforeBackgroundRef = useRef(true);
   const {
     connectionState,
     setConnectionState,
@@ -264,6 +259,37 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
     audioContextRef: refs.audioContextRef,
   });
 
+  const isJoined = connectionState === "joined";
+  const isLoading =
+    connectionState === "connecting" ||
+    connectionState === "joining" ||
+    connectionState === "reconnecting" ||
+    connectionState === "waiting";
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      const isActive = state === "active";
+      isAppActiveRef.current = isActive;
+      if (!isJoined) return;
+
+      if (!isActive) {
+        wasCameraOnBeforeBackgroundRef.current = !isCameraOff;
+        wasMutedBeforeBackgroundRef.current = isMuted;
+        return;
+      }
+
+      if (wasCameraOnBeforeBackgroundRef.current && isCameraOff) {
+        void toggleCamera();
+      }
+      if (!wasMutedBeforeBackgroundRef.current && isMuted) {
+        void toggleMute();
+      }
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, [isJoined, isCameraOff, isMuted, toggleCamera, toggleMute]);
+
   const { toggleHandRaised, setHandRaisedState } = useMeetHandRaise({
     isHandRaised,
     setIsHandRaised,
@@ -385,13 +411,6 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
     abortControllerRef: refs.abortControllerRef,
   });
 
-  const isJoined = connectionState === "joined";
-  const isLoading =
-    connectionState === "connecting" ||
-    connectionState === "joining" ||
-    connectionState === "reconnecting" ||
-    connectionState === "waiting";
-
   const roomIdRef = useRef(roomId);
   roomIdRef.current = roomId;
 
@@ -432,8 +451,13 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
     if (!isJoined) return;
     let cleanupHandlers: (() => void) | undefined;
     let activeCallId: string | null = null;
+    let foregroundStarted = false;
 
     (async () => {
+      if (Platform.OS === "android") {
+        await startForegroundCallService();
+        foregroundStarted = true;
+      }
       await ensureCallKeep();
       activeCallId = startCallSession(
         roomIdRef.current || "Conclave",
@@ -448,6 +472,9 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
     })();
 
     return () => {
+      if (foregroundStarted) {
+        void stopForegroundCallService();
+      }
       if (cleanupHandlers) cleanupHandlers();
       if (activeCallId) endCallSession(activeCallId);
       callIdRef.current = null;

@@ -373,6 +373,64 @@ export function useMeetMedia({
         return;
       }
 
+      if (kind === "video" && connectionState === "joined" && !ghostEnabled && !isCameraOff) {
+        void (async () => {
+          try {
+            const permissionState = await requestAndroidPermissions({ video: true });
+            if (!permissionState.video) {
+              closeProducer();
+              cleanupTrack();
+              return;
+            }
+
+            const constraints =
+              videoQualityRef.current === "low"
+                ? LOW_QUALITY_CONSTRAINTS
+                : STANDARD_QUALITY_CONSTRAINTS;
+
+            const recoveredStream = await getUserMedia({ video: constraints });
+            const newVideoTrack = recoveredStream.getVideoTracks()[0];
+            if (!newVideoTrack) {
+              closeProducer();
+              cleanupTrack();
+              return;
+            }
+
+            if ("contentHint" in newVideoTrack) {
+              newVideoTrack.contentHint = "motion";
+            }
+
+            newVideoTrack.onended = () => {
+              handleLocalTrackEnded("video", newVideoTrack);
+            };
+
+            const producer = videoProducerRef.current;
+            if (producer) {
+              await producer.replaceTrack({ track: newVideoTrack });
+              try {
+                producer.resume();
+              } catch {}
+            }
+
+            setLocalStream((prev) => {
+              if (prev) {
+                const remaining = prev.getTracks().filter((t) => t.kind !== "video");
+                return new MediaStream([...remaining, newVideoTrack]);
+              }
+              return new MediaStream([newVideoTrack]);
+            });
+
+            setIsCameraOff(false);
+            return;
+          } catch (err) {
+            console.error("[Meets] Failed to recover video track:", err);
+            closeProducer();
+            cleanupTrack();
+          }
+        })();
+        return;
+      }
+
       closeProducer();
       cleanupTrack();
     },
@@ -381,11 +439,13 @@ export function useMeetMedia({
       connectionState,
       ghostEnabled,
       isMuted,
+      isCameraOff,
       requestAndroidPermissions,
       getUserMedia,
       buildAudioConstraints,
       selectedAudioInputDeviceId,
       setSelectedAudioInputDeviceId,
+      videoQualityRef,
       setIsMuted,
       setIsCameraOff,
       setLocalStream,
