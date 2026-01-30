@@ -216,10 +216,12 @@ export function ControlsBar({
       ? Math.min(800, availableWidth - 80)
       : availableWidth - 40;
 
-  const buttonSize = Math.max(touchTargetSize, TOUCH_TARGETS.MIN);
-  const iconSize = isTablet ? 18 : 16;
+  const buttonSize = Math.round(
+    Math.max(touchTargetSize, TOUCH_TARGETS.MIN) * (isTablet ? 1.18 : 1.12)
+  );
+  const iconSize = isTablet ? 20 : 18;
   const showInlineToggles = isTablet;
-  const pillGap = isCompact ? 12 : Math.max(8, Math.round(buttonSize * 0.2));
+  const pillGap = isCompact ? 12 : Math.max(10, Math.round(buttonSize * 0.2));
 
   const handleReactionSelect = (emoji: string) => {
     onSendReaction(emoji);
@@ -371,8 +373,8 @@ const styles = StyleSheet.create({
   controlsPill: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     backgroundColor: "transparent",
     borderRadius: 999,
   },
@@ -415,7 +417,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     width: 1,
-    height: 20,
+    height: 24,
     backgroundColor: COLORS.creamFaint,
   },
   badge: {
@@ -437,7 +439,7 @@ const styles = StyleSheet.create({
   },
   reactionPickerContainer: {
     position: "absolute",
-    bottom: 70,
+    bottom: 84,
     left: 0,
     right: 0,
     alignItems: "center",
@@ -466,9 +468,9 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   reactionOption: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
   },
