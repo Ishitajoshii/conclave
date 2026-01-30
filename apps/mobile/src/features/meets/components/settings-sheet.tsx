@@ -3,7 +3,7 @@ import { StyleSheet, View as RNView } from "react-native";
 import * as Haptics from "expo-haptics";
 import { TrueSheet } from "@lodev09/react-native-true-sheet";
 import { Pressable, View } from "@/tw";
-import { Clipboard, Hand, Lock, LockOpen, ScreenShare } from "lucide-react-native";
+import { ClipboardPenLine, Hand, Lock, LockOpen, ScreenShare } from "lucide-react-native";
 import { SHEET_COLORS, SHEET_THEME } from "./true-sheet-theme";
 
 interface SettingsSheetProps {
@@ -128,7 +128,7 @@ export function SettingsSheet({
             accessibilityRole="button"
             accessibilityLabel="Change display name"
           >
-            <Clipboard size={28} color={SHEET_COLORS.text} strokeWidth={1.5} />
+            <ClipboardPenLine size={28} color={SHEET_COLORS.text} strokeWidth={1.5} />
           </Pressable>
 
           {isAdmin ? (
