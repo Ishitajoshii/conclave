@@ -50,8 +50,10 @@ import { createMeetError } from "../utils";
 import { getCachedUser, hydrateCachedUser, setCachedUser } from "../auth-session";
 import { CallScreen } from "./call-screen";
 import { ChatPanel } from "./chat-panel";
+import { DisplayNameSheet } from "./display-name-sheet";
 import { ErrorSheet } from "./error-sheet";
 import { JoinScreen } from "./join-screen";
+import { PendingJoinToast } from "./pending-join-toast";
 import { ParticipantsPanel } from "./participants-panel";
 import { ReactionOverlay } from "./reaction-overlay";
 import { ReactionSheet } from "./reaction-sheet";
@@ -188,6 +190,14 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
   const user = currentUser ?? guestIdentity;
   const [isAdmin, setIsAdmin] = useState(false);
   const [hasActiveCall, setHasActiveCall] = useState(false);
+  const [isDisplayNameSheetOpen, setIsDisplayNameSheetOpen] = useState(false);
+  const [pendingToast, setPendingToast] = useState<{
+    userId: string;
+    displayName: string;
+    count: number;
+  } | null>(null);
+  const pendingToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingToastSeenRef = useRef<Set<string>>(new Set());
 
   const userKey = user?.email || user?.id || `guest-${guestSessionId}`;
   const userId = `${userKey}#${refs.sessionIdRef.current}`;
@@ -196,6 +206,10 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
     setDisplayNames,
     displayNameInput,
     setDisplayNameInput,
+    displayNameStatus,
+    isDisplayNameUpdating,
+    handleDisplayNameSubmit,
+    canUpdateDisplayName,
     resolveDisplayName,
   } = useMeetDisplayName({
     user,
@@ -502,6 +516,68 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
     },
     isAppActiveRef,
   });
+
+  const dismissPendingToast = useCallback(() => {
+    if (pendingToastTimerRef.current) {
+      clearTimeout(pendingToastTimerRef.current);
+      pendingToastTimerRef.current = null;
+    }
+    setPendingToast(null);
+  }, []);
+
+  const showPendingToast = useCallback(
+    (userId: string, displayName: string, count: number) => {
+      if (pendingToastTimerRef.current) {
+        clearTimeout(pendingToastTimerRef.current);
+      }
+      setPendingToast({ userId, displayName, count });
+      pendingToastTimerRef.current = setTimeout(() => {
+        setPendingToast(null);
+        pendingToastTimerRef.current = null;
+      }, 6000);
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!isAdmin || !isJoined) {
+      pendingToastSeenRef.current = new Set();
+      dismissPendingToast();
+      return;
+    }
+
+    const currentIds = new Set(pendingUsers.keys());
+    const previousIds = pendingToastSeenRef.current;
+    const newIds = Array.from(currentIds).filter((id) => !previousIds.has(id));
+    pendingToastSeenRef.current = currentIds;
+
+    if (newIds.length > 0) {
+      const latestId = newIds[newIds.length - 1];
+      const displayName = pendingUsers.get(latestId) || latestId;
+      showPendingToast(latestId, displayName, currentIds.size);
+    } else if (currentIds.size === 0) {
+      dismissPendingToast();
+    } else if (pendingToast && pendingToast.count !== currentIds.size) {
+      setPendingToast((prev) =>
+        prev ? { ...prev, count: currentIds.size } : prev
+      );
+    }
+  }, [
+    isAdmin,
+    isJoined,
+    pendingUsers,
+    pendingToast,
+    dismissPendingToast,
+    showPendingToast,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingToastTimerRef.current) {
+        clearTimeout(pendingToastTimerRef.current);
+      }
+    };
+  }, []);
 
   useMeetAudioActivity({
     participants,
@@ -972,6 +1048,24 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
           participants={Array.from(participants.values())}
           resolveDisplayName={resolveDisplayName}
           onClose={() => setIsParticipantsOpen(false)}
+          pendingUsers={pendingUsers}
+          isAdmin={isAdmin}
+          onAdmitPendingUser={(pendingUserId) => {
+            socket.admitUser?.(pendingUserId);
+            setPendingUsers((prev) => {
+              const next = new Map(prev);
+              next.delete(pendingUserId);
+              return next;
+            });
+          }}
+          onRejectPendingUser={(pendingUserId) => {
+            socket.rejectUser?.(pendingUserId);
+            setPendingUsers((prev) => {
+              const next = new Map(prev);
+              next.delete(pendingUserId);
+              return next;
+            });
+          }}
         />
       ) : null}
 
@@ -992,6 +1086,12 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
           visible={isSettingsSheetOpen}
           isScreenSharing={isScreenSharing}
           isHandRaised={isHandRaised}
+          isRoomLocked={isRoomLocked}
+          isAdmin={isAdmin}
+          onOpenDisplayName={() => {
+            setIsSettingsSheetOpen(false);
+            setIsDisplayNameSheetOpen(true);
+          }}
           onToggleScreenShare={() => {
             setIsSettingsSheetOpen(false);
             handleToggleScreenShare();
@@ -1000,7 +1100,50 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
             setIsSettingsSheetOpen(false);
             toggleHandRaised();
           }}
+          onToggleRoomLock={(locked) => {
+            setIsSettingsSheetOpen(false);
+            socket.toggleRoomLock?.(locked);
+          }}
           onClose={() => setIsSettingsSheetOpen(false)}
+        />
+      ) : null}
+
+      {isJoined ? (
+        <DisplayNameSheet
+          visible={isDisplayNameSheetOpen}
+          value={displayNameInput}
+          onChange={setDisplayNameInput}
+          onSubmit={handleDisplayNameSubmit}
+          onClose={() => setIsDisplayNameSheetOpen(false)}
+          canSubmit={canUpdateDisplayName}
+          isUpdating={isDisplayNameUpdating}
+          status={displayNameStatus}
+        />
+      ) : null}
+
+      {isJoined && isAdmin && pendingToast ? (
+        <PendingJoinToast
+          visible
+          displayName={pendingToast.displayName}
+          count={pendingToast.count}
+          onAdmit={() => {
+            socket.admitUser?.(pendingToast.userId);
+            setPendingUsers((prev) => {
+              const next = new Map(prev);
+              next.delete(pendingToast.userId);
+              return next;
+            });
+            dismissPendingToast();
+          }}
+          onReject={() => {
+            socket.rejectUser?.(pendingToast.userId);
+            setPendingUsers((prev) => {
+              const next = new Map(prev);
+              next.delete(pendingToast.userId);
+              return next;
+            });
+            dismissPendingToast();
+          }}
         />
       ) : null}
 

@@ -211,17 +211,17 @@ export function ControlsBar({
   // On iPad, never use compact mode - show all controls
   const isCompact = !isTablet && availableWidth < 420;
   const pillMaxWidth = isCompact
-    ? Math.min(340, availableWidth - 32)
+    ? Math.min(360, availableWidth - 24)
     : isTablet
-      ? Math.min(800, availableWidth - 80)
-      : availableWidth - 40;
+      ? Math.min(860, availableWidth - 60)
+      : availableWidth - 24;
 
   const buttonSize = Math.round(
-    Math.max(touchTargetSize, TOUCH_TARGETS.MIN) * (isTablet ? 1.18 : 1.12)
+    Math.max(touchTargetSize, TOUCH_TARGETS.MIN) * (isTablet ? 1.24 : 1.18)
   );
-  const iconSize = isTablet ? 20 : 18;
+  const iconSize = isTablet ? 22 : 19;
   const showInlineToggles = isTablet;
-  const pillGap = isCompact ? 12 : Math.max(10, Math.round(buttonSize * 0.2));
+  const pillGap = isCompact ? 14 : Math.max(12, Math.round(buttonSize * 0.25));
 
   const handleReactionSelect = (emoji: string) => {
     onSendReaction(emoji);
@@ -373,8 +373,8 @@ const styles = StyleSheet.create({
   controlsPill: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     backgroundColor: "transparent",
     borderRadius: 999,
   },
@@ -417,7 +417,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     width: 1,
-    height: 24,
+    height: 26,
     backgroundColor: COLORS.creamFaint,
   },
   badge: {
@@ -439,7 +439,7 @@ const styles = StyleSheet.create({
   },
   reactionPickerContainer: {
     position: "absolute",
-    bottom: 84,
+    bottom: 90,
     left: 0,
     right: 0,
     alignItems: "center",
