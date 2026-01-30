@@ -2,7 +2,6 @@ import React from "react";
 import { StyleSheet, View as RNView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Pressable, Text } from "@/tw";
-import { Check, X } from "lucide-react-native";
 
 interface PendingJoinToastProps {
   visible: boolean;
@@ -26,7 +25,7 @@ export function PendingJoinToast({
   return (
     <RNView
       pointerEvents="box-none"
-      style={[styles.container, { top: insets.top + 10 }]}
+      style={[styles.container, { bottom: insets.bottom + 96 }]}
     >
       <RNView style={styles.toast}>
         <Text style={styles.label}>Waiting</Text>
@@ -46,7 +45,7 @@ export function PendingJoinToast({
           accessibilityRole="button"
           accessibilityLabel="Reject"
         >
-          <X size={14} color="rgba(248, 113, 113, 0.95)" />
+          <Text style={styles.rejectIcon}>✕</Text>
         </Pressable>
         <Pressable
           onPress={onAdmit}
@@ -58,7 +57,7 @@ export function PendingJoinToast({
           accessibilityRole="button"
           accessibilityLabel="Admit"
         >
-          <Check size={14} color="#0b0b0b" />
+          <Text style={styles.admitIcon}>✓</Text>
         </Pressable>
       </RNView>
     </RNView>
@@ -114,6 +113,16 @@ const styles = StyleSheet.create({
   admitButton: {
     borderColor: "rgba(249, 95, 74, 0.6)",
     backgroundColor: "rgba(249, 95, 74, 0.85)",
+  },
+  rejectIcon: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "rgba(248, 113, 113, 0.95)",
+  },
+  admitIcon: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#16a34a",
   },
   buttonPressed: {
     opacity: 0.7,

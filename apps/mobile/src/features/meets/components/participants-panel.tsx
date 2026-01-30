@@ -4,7 +4,6 @@ import type { Participant } from "../types";
 import { TrueSheet } from "@lodev09/react-native-true-sheet";
 import { FlatList, Pressable, Text, View } from "@/tw";
 import { SHEET_COLORS, SHEET_THEME } from "./true-sheet-theme";
-import { Check, X } from "lucide-react-native";
 
 interface ParticipantsPanelProps {
   participants: Participant[];
@@ -130,7 +129,7 @@ export function ParticipantsPanel({
                       accessibilityRole="button"
                       accessibilityLabel="Reject"
                     >
-                      <X size={14} color="rgba(248, 113, 113, 0.95)" />
+                      <Text style={styles.pendingRejectIcon}>✕</Text>
                     </Pressable>
                     <Pressable
                       onPress={() => onAdmitPendingUser?.(userId)}
@@ -142,7 +141,7 @@ export function ParticipantsPanel({
                       accessibilityRole="button"
                       accessibilityLabel="Admit"
                     >
-                      <Check size={14} color="#0b0b0b" />
+                      <Text style={styles.pendingAdmitIcon}>✓</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -271,6 +270,16 @@ const styles = StyleSheet.create({
   pendingAdmit: {
     borderColor: "rgba(249, 95, 74, 0.6)",
     backgroundColor: "rgba(249, 95, 74, 0.85)",
+  },
+  pendingRejectIcon: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "rgba(248, 113, 113, 0.95)",
+  },
+  pendingAdmitIcon: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#16a34a",
   },
   pendingButtonPressed: {
     opacity: 0.7,
