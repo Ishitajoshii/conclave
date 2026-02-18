@@ -73,24 +73,6 @@ We welcome contributions of all kinds! Please read our [Contributing Guidelines]
 
 ---
 
-## Hacktoberfest
-
-<p>
-  <a href="https://hacktoberfest.com/" target="_blank">
-<img alt="hactoberfest" src="https://img.shields.io/github/hacktoberfest/2025/tmrowco/tmrowapp-contrib?style=flat-square&logo=acm&labelColor=indigo&link=hacktoberfest.com"/>
-  </a>
-
-<!-- Badge Format 
-https://img.shields.io/github/hacktoberfest/:year/:user/:repo
--->
-
-Join us for Hacktoberfest! Quality > quantity.
-- Aim for meaningful, well‑scoped PR/MRs that solve real issues.
-- Non‑code contributions (docs, design, tutorials) are welcome via PR.
-- Full participation details: https://hacktoberfest.com/participation
-
----
-
 ## Submitting a Pull Request
 
 1. Fork the repository (top‑right on GitHub)
@@ -125,7 +107,6 @@ Join us for Hacktoberfest! Quality > quantity.
 - Avoid PRs that are automated/scripted or plagiarized from someone else’s work.
 - Don’t spam; keep each PR focused and meaningful.
 - The project maintainer’s decision on PR validity is final.
-- For more, see our [Contributing Guidelines](contributing.md) and the Hacktoberfest [participation rules](https://hacktoberfest.com/participation).
 
 ---
 
