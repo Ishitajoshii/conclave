@@ -208,6 +208,120 @@ export function useMeetMedia({
     return null;
   }, []);
 
+  const collectRtcStatsEntries = useCallback((report: RTCStatsReport) => {
+    const entries: Array<{
+      type?: string;
+      kind?: string;
+      mediaType?: string;
+      bytesSent?: number;
+      framesSent?: number;
+      framesEncoded?: number;
+    }> = [];
+    const maybeReport = report as RTCStatsReport & {
+      values?: () => IterableIterator<unknown>;
+      forEach?: (cb: (value: unknown) => void) => void;
+    };
+
+    if (typeof maybeReport.values === "function") {
+      for (const value of maybeReport.values()) {
+        if (value && typeof value === "object") {
+          entries.push(value as (typeof entries)[number]);
+        }
+      }
+      return entries;
+    }
+
+    if (typeof maybeReport.forEach === "function") {
+      maybeReport.forEach((value: unknown) => {
+        if (value && typeof value === "object") {
+          entries.push(value as (typeof entries)[number]);
+        }
+      });
+    }
+
+    return entries;
+  }, []);
+
+  const getOutboundVideoProgress = useCallback(
+    (report: RTCStatsReport) => {
+      let bytesSent = 0;
+      let framesSent = 0;
+      let foundVideoOutbound = false;
+
+      for (const stats of collectRtcStatsEntries(report)) {
+        if (stats.type !== "outbound-rtp") continue;
+        const mediaType = stats.kind || stats.mediaType;
+        if (mediaType !== "video") continue;
+        foundVideoOutbound = true;
+        if (typeof stats.bytesSent === "number") {
+          bytesSent += stats.bytesSent;
+        }
+        if (typeof stats.framesSent === "number") {
+          framesSent += stats.framesSent;
+        } else if (typeof stats.framesEncoded === "number") {
+          framesSent += stats.framesEncoded;
+        }
+      }
+
+      if (!foundVideoOutbound) {
+        return null;
+      }
+
+      return { bytesSent, framesSent };
+    },
+    [collectRtcStatsEntries]
+  );
+
+  const waitForOutgoingScreenFrames = useCallback(
+    async (producer: Producer) => {
+      const timeoutMs = Platform.OS === "ios" ? 7000 : 4500;
+      const pollMs = 350;
+      const deadline = Date.now() + timeoutMs;
+      let seenOutboundStats = false;
+      let previousBytesSent = 0;
+
+      while (Date.now() < deadline) {
+        const track = producer.track;
+        if (producer.closed || !track || track.readyState === "ended") {
+          throw new Error("Screen share ended before capture started.");
+        }
+
+        try {
+          const stats = await producer.getStats();
+          const progress = getOutboundVideoProgress(stats);
+          if (progress) {
+            seenOutboundStats = true;
+            if (progress.framesSent > 0) {
+              return;
+            }
+            if (progress.bytesSent > previousBytesSent + 1024) {
+              return;
+            }
+            previousBytesSent = Math.max(previousBytesSent, progress.bytesSent);
+          }
+        } catch (statsError) {
+          console.warn(
+            "[Meets] Screen share stats unavailable; skipping startup verification:",
+            statsError
+          );
+          return;
+        }
+
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, pollMs);
+        });
+      }
+
+      if (seenOutboundStats) {
+        throw new Error("No screen frames were captured.");
+      }
+      console.warn(
+        "[Meets] Screen share startup stats were unavailable; continuing without verification."
+      );
+    },
+    [getOutboundVideoProgress]
+  );
+
   const getAudioContext = useCallback(() => {
     const AudioContextConstructor =
       globalThis.AudioContext ||
@@ -1306,6 +1420,10 @@ export function useMeetMedia({
       return;
     }
 
+    if (connectionState !== "joined") {
+      return;
+    }
+
     if (activeScreenShareId) {
       setMeetError({
         code: "UNKNOWN",
@@ -1318,6 +1436,7 @@ export function useMeetMedia({
     const transport = producerTransportRef.current;
     if (!transport) return;
 
+    let producer: Producer | null = null;
     try {
       if (Platform.OS === "android" && Platform.Version >= 33) {
         const status = await PermissionsAndroid.request(
@@ -1344,24 +1463,39 @@ export function useMeetMedia({
       }
       track.enabled = true;
       screenShareStreamRef.current = stream;
-      setScreenShareStream(stream);
       if (track && "contentHint" in track) {
         track.contentHint = "detail";
       }
 
-      const producer = await transport.produce({
+      producer = await transport.produce({
         track,
         encodings: [{ maxBitrate: 2500000 }],
         appData: { type: "screen" as ProducerType },
       });
 
-      screenProducerRef.current = producer;
-      setIsScreenSharing(true);
-
       track.onended = () => {
         stopScreenShare({ notify: true });
       };
+
+      screenProducerRef.current = producer;
+      await waitForOutgoingScreenFrames(producer);
+
+      if (connectionState !== "joined") {
+        stopScreenShare({ notify: false });
+        return;
+      }
+
+      setScreenShareStream(stream);
+      setIsScreenSharing(true);
     } catch (err) {
+      if (producer) {
+        try {
+          producer.close();
+        } catch {}
+        if (screenProducerRef.current?.id === producer.id) {
+          screenProducerRef.current = null;
+        }
+      }
       if (screenShareStreamRef.current) {
         screenShareStreamRef.current
           .getTracks()
@@ -1399,6 +1533,7 @@ export function useMeetMedia({
     isScreenSharing,
     activeScreenShareId,
     setIsScreenSharing,
+    connectionState,
     producerTransportRef,
     screenProducerRef,
     socketRef,
@@ -1407,6 +1542,7 @@ export function useMeetMedia({
     setMeetError,
     stopLocalTrack,
     stopScreenShare,
+    waitForOutgoingScreenFrames,
   ]);
 
   useEffect(() => {

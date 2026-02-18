@@ -140,6 +140,9 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
   }, []);
   const isCameraOffRef = useRef(isCameraOff);
   const isMutedRef = useRef(isMuted);
+  const isScreenSharingRef = useRef(isScreenSharing);
+  const hasActiveCallRef = useRef(false);
+  const connectionStateRef = useRef(connectionState);
   const shouldKeepAliveInBackground = isScreenSharing || !!activeScreenShareId;
 
   const {
@@ -207,6 +210,10 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
   const [hasActiveCall, setHasActiveCall] = useState(false);
   const [isDisplayNameSheetOpen, setIsDisplayNameSheetOpen] = useState(false);
   const [isScreenSharePending, setIsScreenSharePending] = useState(false);
+  const screenShareRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const screenShareRequestTokenRef = useRef(0);
   const [pendingToast, setPendingToast] = useState<{
     userId: string;
     displayName: string;
@@ -344,6 +351,18 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
   useEffect(() => {
     isMutedRef.current = isMuted;
   }, [isMuted]);
+
+  useEffect(() => {
+    isScreenSharingRef.current = isScreenSharing;
+  }, [isScreenSharing]);
+
+  useEffect(() => {
+    hasActiveCallRef.current = hasActiveCall;
+  }, [hasActiveCall]);
+
+  useEffect(() => {
+    connectionStateRef.current = connectionState;
+  }, [connectionState]);
 
   useEffect(() => {
     if (
@@ -633,26 +652,44 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
   const stopScreenShareRef = useRef(stopScreenShare);
   stopScreenShareRef.current = stopScreenShare;
 
+  const cancelPendingScreenShareStart = useCallback(() => {
+    screenShareRequestTokenRef.current += 1;
+    if (screenShareRetryTimerRef.current) {
+      clearTimeout(screenShareRetryTimerRef.current);
+      screenShareRetryTimerRef.current = null;
+    }
+    setIsScreenSharePending(false);
+  }, []);
+
   const handleLeave = useCallback(() => {
     setHasActiveCall(false);
+    hasActiveCallRef.current = false;
     playNotificationSoundRef.current("leave");
-    setIsScreenSharePending(false);
+    cancelPendingScreenShareStart();
     stopScreenShareRef.current({ notify: true });
     socketCleanupRef.current();
     if (callIdRef.current) endCallSession(callIdRef.current);
     stopInCall();
-  }, []);
+  }, [cancelPendingScreenShareStart]);
 
   useEffect(() => {
     if (Platform.OS !== "ios") return;
     if (hasActiveCall) return;
-    if (isScreenSharePending) {
-      setIsScreenSharePending(false);
-    }
+    cancelPendingScreenShareStart();
     if (isScreenSharing) {
       stopScreenShare({ notify: false });
     }
-  }, [hasActiveCall, isScreenSharing, isScreenSharePending, stopScreenShare]);
+  }, [hasActiveCall, isScreenSharing, cancelPendingScreenShareStart, stopScreenShare]);
+
+  useEffect(() => {
+    return () => {
+      screenShareRequestTokenRef.current += 1;
+      if (screenShareRetryTimerRef.current) {
+        clearTimeout(screenShareRetryTimerRef.current);
+        screenShareRetryTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (process.env.EXPO_OS === "web") return;
@@ -800,39 +837,83 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
     }
 
     if (isScreenSharing) {
+      cancelPendingScreenShareStart();
       void toggleScreenShare();
       return;
     }
 
+    if (connectionState !== "joined") {
+      return;
+    }
+
     showScreenSharePicker();
+    screenShareRequestTokenRef.current += 1;
     setIsScreenSharePending(true);
-  }, [isScreenSharing, showScreenSharePicker, toggleScreenShare]);
+  }, [
+    isScreenSharing,
+    connectionState,
+    showScreenSharePicker,
+    toggleScreenShare,
+    cancelPendingScreenShareStart,
+  ]);
 
   useEffect(() => {
+    if (Platform.OS !== "ios") return;
     if (!isScreenSharePending || isScreenSharing) return;
 
-    let cancelled = false;
+    const requestToken = ++screenShareRequestTokenRef.current;
     let attempts = 0;
-    const maxAttempts = 8;
-    const delayMs = 600;
+    const maxAttempts = 10;
+    const delayMs = 650;
+
+    const schedule = (delay: number) => {
+      if (screenShareRetryTimerRef.current) {
+        clearTimeout(screenShareRetryTimerRef.current);
+      }
+      screenShareRetryTimerRef.current = setTimeout(() => {
+        void attempt();
+      }, delay);
+    };
 
     const attempt = async () => {
-      if (cancelled || isScreenSharing) return;
+      if (screenShareRequestTokenRef.current !== requestToken) return;
+      if (
+        !hasActiveCallRef.current ||
+        connectionStateRef.current !== "joined"
+      ) {
+        cancelPendingScreenShareStart();
+        return;
+      }
+
       attempts += 1;
       await toggleScreenShare();
-      if (!isScreenSharing && attempts < maxAttempts) {
-        setTimeout(attempt, delayMs);
-      } else {
+
+      if (screenShareRequestTokenRef.current !== requestToken) return;
+
+      if (isScreenSharingRef.current || attempts >= maxAttempts) {
         setIsScreenSharePending(false);
+        return;
       }
+
+      schedule(delayMs);
     };
 
-    const timer = setTimeout(attempt, 400);
+    schedule(350);
     return () => {
-      cancelled = true;
-      clearTimeout(timer);
+      if (screenShareRequestTokenRef.current === requestToken) {
+        screenShareRequestTokenRef.current += 1;
+      }
+      if (screenShareRetryTimerRef.current) {
+        clearTimeout(screenShareRetryTimerRef.current);
+        screenShareRetryTimerRef.current = null;
+      }
     };
-  }, [isScreenSharePending, isScreenSharing, toggleScreenShare]);
+  }, [
+    isScreenSharePending,
+    isScreenSharing,
+    toggleScreenShare,
+    cancelPendingScreenShareStart,
+  ]);
 
   const localParticipant = useMemo<Participant>(
     () => ({
