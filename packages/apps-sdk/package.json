@@ -12,6 +12,8 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./dev-playground/core": "./src/apps/dev-playground/core/index.ts",
+    "./dev-playground/web": "./src/apps/dev-playground/web/index.ts",
     "./whiteboard/core": "./src/apps/whiteboard/core/index.ts",
     "./whiteboard/native": "./src/apps/whiteboard/native/index.ts",
     "./whiteboard/web": "./src/apps/whiteboard/web/index.ts"

@@ -26,6 +26,7 @@ import MobilePresentationLayout from "./MobilePresentationLayout";
 import SystemAudioPlayers from "../SystemAudioPlayers";
 import { isSystemUserId } from "../../lib/utils";
 import { useApps } from "@conclave/apps-sdk";
+import DevPlaygroundLayout from "../DevPlaygroundLayout";
 import WhiteboardLayout from "../WhiteboardLayout";
 
 interface MobileMeetsMainContentProps {
@@ -184,9 +185,16 @@ function MobileMeetsMainContent({
   onTestSpeaker,
 }: MobileMeetsMainContentProps) {
   const { state: appsState, openApp, closeApp, setLocked, refreshState } = useApps();
+  const isDevPlaygroundEnabled = process.env.NODE_ENV === "development";
   const isWhiteboardActive = appsState.activeAppId === "whiteboard";
+  const isDevPlaygroundActive = appsState.activeAppId === "dev-playground";
   const handleOpenWhiteboard = useCallback(() => openApp("whiteboard"), [openApp]);
   const handleCloseWhiteboard = useCallback(() => closeApp(), [closeApp]);
+  const handleOpenDevPlayground = useCallback(
+    () => openApp("dev-playground"),
+    [openApp]
+  );
+  const handleCloseDevPlayground = useCallback(() => closeApp(), [closeApp]);
   const handleToggleAppsLock = useCallback(
     () => setLocked(!appsState.locked),
     [appsState.locked, setLocked]
@@ -334,6 +342,21 @@ function MobileMeetsMainContent({
             audioOutputDeviceId={audioOutputDeviceId}
             getDisplayName={resolveDisplayName}
           />
+        ) : isDevPlaygroundEnabled && isDevPlaygroundActive ? (
+          <DevPlaygroundLayout
+            localStream={localStream}
+            isCameraOff={isCameraOff}
+            isMuted={isMuted}
+            isHandRaised={isHandRaised}
+            isGhost={ghostEnabled}
+            participants={participants}
+            userEmail={userEmail}
+            isMirrorCamera={isMirrorCamera}
+            activeSpeakerId={activeSpeakerId}
+            currentUserId={currentUserId}
+            audioOutputDeviceId={audioOutputDeviceId}
+            getDisplayName={resolveDisplayName}
+          />
         ) : browserState?.active && browserState.noVncUrl ? (
           <MobileBrowserLayout
             browserUrl={browserState.url || ""}
@@ -461,6 +484,10 @@ function MobileMeetsMainContent({
         isWhiteboardActive={isWhiteboardActive}
         onOpenWhiteboard={isAdmin ? handleOpenWhiteboard : undefined}
         onCloseWhiteboard={isAdmin ? handleCloseWhiteboard : undefined}
+        isDevPlaygroundEnabled={isDevPlaygroundEnabled}
+        isDevPlaygroundActive={isDevPlaygroundActive}
+        onOpenDevPlayground={isAdmin ? handleOpenDevPlayground : undefined}
+        onCloseDevPlayground={isAdmin ? handleCloseDevPlayground : undefined}
         isAppsLocked={appsState.locked}
         onToggleAppsLock={isAdmin ? handleToggleAppsLock : undefined}
       />

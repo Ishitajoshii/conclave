@@ -16,6 +16,7 @@ import ParticipantsPanel from "./ParticipantsPanel";
 import PresentationLayout from "./PresentationLayout";
 import ReactionOverlay from "./ReactionOverlay";
 import BrowserLayout from "./BrowserLayout";
+import DevPlaygroundLayout from "./DevPlaygroundLayout";
 import SystemAudioPlayers from "./SystemAudioPlayers";
 import WhiteboardLayout from "./WhiteboardLayout";
 import type { BrowserState } from "../hooks/useSharedBrowser";
@@ -205,9 +206,16 @@ export default function MeetsMainContent({
   onClosePopout,
 }: MeetsMainContentProps) {
   const { state: appsState, openApp, closeApp, setLocked, refreshState } = useApps();
+  const isDevPlaygroundEnabled = process.env.NODE_ENV === "development";
   const isWhiteboardActive = appsState.activeAppId === "whiteboard";
+  const isDevPlaygroundActive = appsState.activeAppId === "dev-playground";
   const handleOpenWhiteboard = useCallback(() => openApp("whiteboard"), [openApp]);
   const handleCloseWhiteboard = useCallback(() => closeApp(), [closeApp]);
+  const handleOpenDevPlayground = useCallback(
+    () => openApp("dev-playground"),
+    [openApp]
+  );
+  const handleCloseDevPlayground = useCallback(() => closeApp(), [closeApp]);
   const handleToggleAppsLock = useCallback(
     () => setLocked(!appsState.locked),
     [appsState.locked, setLocked]
@@ -325,6 +333,21 @@ export default function MeetsMainContent({
         />
       ) : isWhiteboardActive ? (
         <WhiteboardLayout
+          localStream={localStream}
+          isCameraOff={isCameraOff}
+          isMuted={isMuted}
+          isHandRaised={isHandRaised}
+          isGhost={ghostEnabled}
+          participants={participants}
+          userEmail={userEmail}
+          isMirrorCamera={isMirrorCamera}
+          activeSpeakerId={activeSpeakerId}
+          currentUserId={currentUserId}
+          audioOutputDeviceId={audioOutputDeviceId}
+          getDisplayName={resolveDisplayName}
+        />
+      ) : isDevPlaygroundEnabled && isDevPlaygroundActive ? (
+        <DevPlaygroundLayout
           localStream={localStream}
           isCameraOff={isCameraOff}
           isMuted={isMuted}
@@ -457,6 +480,10 @@ export default function MeetsMainContent({
               isWhiteboardActive={isWhiteboardActive}
               onOpenWhiteboard={isAdmin ? handleOpenWhiteboard : undefined}
               onCloseWhiteboard={isAdmin ? handleCloseWhiteboard : undefined}
+              isDevPlaygroundEnabled={isDevPlaygroundEnabled}
+              isDevPlaygroundActive={isDevPlaygroundActive}
+              onOpenDevPlayground={isAdmin ? handleOpenDevPlayground : undefined}
+              onCloseDevPlayground={isAdmin ? handleCloseDevPlayground : undefined}
               isAppsLocked={appsState.locked}
               onToggleAppsLock={isAdmin ? handleToggleAppsLock : undefined}
               isPopoutActive={isPopoutActive}

@@ -20,6 +20,12 @@
       ],
       "@conclave/apps-sdk/whiteboard/core": [
         "../../packages/apps-sdk/src/apps/whiteboard/core/index.ts"
+      ],
+      "@conclave/apps-sdk/dev-playground/web": [
+        "../../packages/apps-sdk/src/apps/dev-playground/web/index.ts"
+      ],
+      "@conclave/apps-sdk/dev-playground/core": [
+        "../../packages/apps-sdk/src/apps/dev-playground/core/index.ts"
       ]
     }
   },

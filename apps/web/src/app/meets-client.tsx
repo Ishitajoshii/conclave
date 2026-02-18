@@ -13,6 +13,7 @@ import {
   createAssetUploadHandler,
   registerApps,
 } from "@conclave/apps-sdk";
+import { devPlaygroundApp } from "@conclave/apps-sdk/dev-playground/web";
 import { whiteboardApp } from "@conclave/apps-sdk/whiteboard/web";
 import MeetsErrorBanner from "./components/MeetsErrorBanner";
 import MeetsHeader from "./components/MeetsHeader";
@@ -40,10 +41,6 @@ import { useIsMobile } from "./hooks/useIsMobile";
 import { usePrewarmSocket } from "./hooks/usePrewarmSocket";
 import { useSharedBrowser } from "./hooks/useSharedBrowser";
 import { sanitizeRoomCode } from "./lib/utils";
-
-// ============================================
-// Main Component
-// ============================================
 
 export type MeetsClientProps = {
   initialRoomId?: string;
@@ -96,6 +93,10 @@ export default function MeetsClient({
   );
 
   useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      registerApps([whiteboardApp, devPlaygroundApp]);
+      return;
+    }
     registerApps([whiteboardApp]);
   }, []);
 

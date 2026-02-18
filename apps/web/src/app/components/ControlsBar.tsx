@@ -67,6 +67,10 @@ interface ControlsBarProps {
   isWhiteboardActive?: boolean;
   onOpenWhiteboard?: () => void;
   onCloseWhiteboard?: () => void;
+  isDevPlaygroundEnabled?: boolean;
+  isDevPlaygroundActive?: boolean;
+  onOpenDevPlayground?: () => void;
+  onCloseDevPlayground?: () => void;
   isAppsLocked?: boolean;
   onToggleAppsLock?: () => void;
   isPopoutActive?: boolean;
@@ -175,6 +179,10 @@ function ControlsBar({
   isWhiteboardActive = false,
   onOpenWhiteboard,
   onCloseWhiteboard,
+  isDevPlaygroundEnabled = false,
+  isDevPlaygroundActive = false,
+  onOpenDevPlayground,
+  onCloseDevPlayground,
   isAppsLocked = false,
   onToggleAppsLock,
   isPopoutActive = false,
@@ -201,7 +209,13 @@ function ControlsBar({
   const ghostDisabledClass = `${baseButtonClass} !opacity-30 cursor-not-allowed`;
   const screenShareDisabled = isGhostMode || !canStartScreenShare;
   const canManageWhiteboard = Boolean(isAdmin && (onOpenWhiteboard || onCloseWhiteboard));
-  const canShowAppsMenu = canManageWhiteboard || Boolean(onToggleAppsLock);
+  const canManageDevPlayground = Boolean(
+    isAdmin &&
+      isDevPlaygroundEnabled &&
+      (onOpenDevPlayground || onCloseDevPlayground)
+  );
+  const canShowAppsMenu =
+    canManageWhiteboard || canManageDevPlayground || Boolean(onToggleAppsLock);
 
   useEffect(() => {
     if (!isReactionMenuOpen) return;
@@ -629,6 +643,24 @@ function ControlsBar({
                   className="w-full text-left px-3 py-2 rounded-lg text-sm text-[#FEFCD9]/80 hover:bg-white/10"
                 >
                   {isWhiteboardActive ? "Close whiteboard" : "Open whiteboard"}
+                </button>
+              )}
+              {canManageDevPlayground && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isDevPlaygroundActive) {
+                      onCloseDevPlayground?.();
+                    } else {
+                      onOpenDevPlayground?.();
+                    }
+                    setIsAppsMenuOpen(false);
+                  }}
+                  className="mt-2 w-full text-left px-3 py-2 rounded-lg text-sm text-[#FEFCD9]/80 hover:bg-white/10"
+                >
+                  {isDevPlaygroundActive
+                    ? "Close dev playground"
+                    : "Open dev playground"}
                 </button>
               )}
               {onToggleAppsLock && (

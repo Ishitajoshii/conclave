@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Code2,
   Hand,
   Globe,
   Lock,
@@ -58,6 +59,10 @@ interface MobileControlsBarProps {
   isWhiteboardActive?: boolean;
   onOpenWhiteboard?: () => void;
   onCloseWhiteboard?: () => void;
+  isDevPlaygroundEnabled?: boolean;
+  isDevPlaygroundActive?: boolean;
+  onOpenDevPlayground?: () => void;
+  onCloseDevPlayground?: () => void;
   isAppsLocked?: boolean;
   onToggleAppsLock?: () => void;
 }
@@ -97,6 +102,10 @@ function MobileControlsBar({
   isWhiteboardActive = false,
   onOpenWhiteboard,
   onCloseWhiteboard,
+  isDevPlaygroundEnabled = false,
+  isDevPlaygroundActive = false,
+  onOpenDevPlayground,
+  onCloseDevPlayground,
   isAppsLocked = false,
   onToggleAppsLock,
 }: MobileControlsBarProps) {
@@ -300,6 +309,39 @@ function MobileControlsBar({
                   }`}
                 >
                   {isWhiteboardActive ? "Live" : "Off"}
+                </span>
+              </button>
+            )}
+            {isAdmin &&
+              isDevPlaygroundEnabled &&
+              (onOpenDevPlayground || onCloseDevPlayground) && (
+              <button
+                onClick={() => {
+                  if (isDevPlaygroundActive) {
+                    onCloseDevPlayground?.();
+                  } else {
+                    onOpenDevPlayground?.();
+                  }
+                  setIsMoreMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[#FEFCD9] hover:bg-[#FEFCD9]/5 active:bg-[#FEFCD9]/10 transition-transform duration-150 touch-feedback"
+              >
+                <div className="h-9 w-9 rounded-xl bg-[#2b2b2b] border border-white/5 flex items-center justify-center">
+                  <Code2 className="w-4.5 h-4.5" />
+                </div>
+                <span className="text-sm font-medium">
+                  {isDevPlaygroundActive
+                    ? "Close dev playground"
+                    : "Open dev playground"}
+                </span>
+                <span
+                  className={`ml-auto text-[10px] uppercase tracking-[0.2em] ${
+                    isDevPlaygroundActive
+                      ? "text-emerald-300"
+                      : "text-[#FEFCD9]/40"
+                  }`}
+                >
+                  {isDevPlaygroundActive ? "Live" : "Off"}
                 </span>
               </button>
             )}
