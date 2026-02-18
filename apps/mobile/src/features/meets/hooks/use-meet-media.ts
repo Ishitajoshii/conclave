@@ -872,7 +872,6 @@ export function useMeetMedia({
           };
           try {
             await currentTrack.applyConstraints(constraints);
-            return;
           } catch (err) {
             console.warn(
               "[Meets] applyConstraints failed, reopening camera:",
@@ -881,29 +880,77 @@ export function useMeetMedia({
           }
         }
 
-        const newStream = await getUserMedia({
-          video: constraints,
+        let nextVideoTrack = localStream.getVideoTracks()[0];
+
+        if (!nextVideoTrack || nextVideoTrack.readyState !== "live") {
+          const newStream = await getUserMedia({
+            video: constraints,
+          });
+          const newVideoTrack = newStream.getVideoTracks()[0];
+          if (!newVideoTrack) {
+            throw new Error("No video track obtained");
+          }
+          if ("contentHint" in newVideoTrack) {
+            newVideoTrack.contentHint = "motion";
+          }
+          newVideoTrack.onended = () => {
+            handleLocalTrackEnded("video", newVideoTrack);
+          };
+
+          const oldVideoTrack = localStream.getVideoTracks()[0];
+          if (oldVideoTrack) {
+            stopLocalTrack(oldVideoTrack);
+            localStream.removeTrack(oldVideoTrack);
+          }
+          localStream.addTrack(newVideoTrack);
+          setLocalStream(new MediaStream(localStream.getTracks()));
+          nextVideoTrack = newVideoTrack;
+        }
+
+        const transport = producerTransportRef.current;
+        const currentProducer = videoProducerRef.current;
+
+        if (!transport || !currentProducer || !nextVideoTrack) {
+          return;
+        }
+
+        socketRef.current?.emit(
+          "closeProducer",
+          { producerId: currentProducer.id },
+          () => {}
+        );
+        try {
+          currentProducer.close();
+        } catch {}
+        if (videoProducerRef.current?.id === currentProducer.id) {
+          videoProducerRef.current = null;
+        }
+
+        let nextProducer: Producer;
+        try {
+          nextProducer = await transport.produce({
+            track: nextVideoTrack,
+            encodings: buildWebcamSimulcastEncodings(quality),
+            appData: { type: "webcam" as ProducerType, paused: false },
+          });
+        } catch (simulcastError) {
+          console.warn(
+            "[Meets] Simulcast video quality update failed, retrying single-layer:",
+            simulcastError
+          );
+          nextProducer = await transport.produce({
+            track: nextVideoTrack,
+            encodings: [buildWebcamSingleLayerEncoding(quality)],
+            appData: { type: "webcam" as ProducerType, paused: false },
+          });
+        }
+
+        videoProducerRef.current = nextProducer;
+        nextProducer.on("transportclose", () => {
+          if (videoProducerRef.current?.id === nextProducer.id) {
+            videoProducerRef.current = null;
+          }
         });
-        const newVideoTrack = newStream.getVideoTracks()[0];
-        if (newVideoTrack && "contentHint" in newVideoTrack) {
-          newVideoTrack.contentHint = "motion";
-        }
-        newVideoTrack.onended = () => {
-          handleLocalTrackEnded("video", newVideoTrack);
-        };
-
-        const oldVideoTrack = localStream.getVideoTracks()[0];
-        if (oldVideoTrack) {
-          stopLocalTrack(oldVideoTrack);
-          localStream.removeTrack(oldVideoTrack);
-        }
-        localStream.addTrack(newVideoTrack);
-        setLocalStream(new MediaStream(localStream.getTracks()));
-
-        const producer = videoProducerRef.current;
-        if (producer) {
-          await producer.replaceTrack({ track: newVideoTrack });
-        }
       } catch (err) {
         console.error("[Meets] Failed to update video quality:", err);
       }
@@ -914,6 +961,8 @@ export function useMeetMedia({
       handleLocalTrackEnded,
       stopLocalTrack,
       setLocalStream,
+      socketRef,
+      producerTransportRef,
       videoProducerRef,
     ]
   );

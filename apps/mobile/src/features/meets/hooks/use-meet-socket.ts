@@ -1498,6 +1498,7 @@ export function useMeetSocket({
               "setVideoQuality",
               async ({ quality }: { quality: VideoQuality }) => {
                 console.log(`[Meets] Setting video quality to: ${quality}`);
+                videoQualityRef.current = quality;
                 setVideoQuality(quality);
                 await updateVideoQualityRef.current(quality);
               }
