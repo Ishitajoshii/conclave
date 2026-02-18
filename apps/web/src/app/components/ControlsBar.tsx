@@ -30,6 +30,7 @@ import {
 import { memo, useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { ReactionOption } from "../lib/types";
 import { normalizeBrowserUrl } from "../lib/utils";
+import { HOTKEYS } from "../lib/hotkeys";
 import HotkeyTooltip from "./HotkeyTooltip";
 
 interface ControlsBarProps {
@@ -261,7 +262,7 @@ function ControlsBar({
     <div className="flex justify-center items-center gap-1 shrink-0 py-2 px-3 bg-black/40 backdrop-blur-sm rounded-full mx-auto"
       style={{ fontFamily: "'PolySans Mono', monospace" }}
     >
-      <HotkeyTooltip label="Participants" hotkey="Mod+Alt+P">
+      <HotkeyTooltip label={HOTKEYS.toggleParticipants.label} hotkey={HOTKEYS.toggleParticipants.keys}>
         <button
           onClick={onToggleParticipants}
           className={`relative ${isParticipantsOpen ? activeButtonClass : defaultButtonClass}`}
@@ -294,7 +295,7 @@ function ControlsBar({
         </button>
       )}
 
-      <HotkeyTooltip label={isMuted ? "Unmute" : "Mute"} hotkey="Mod+D">
+      <HotkeyTooltip label={HOTKEYS.toggleMute.label} hotkey={HOTKEYS.toggleMute.keys}>
         <button
           onClick={onToggleMute}
           disabled={isGhostMode}
@@ -312,8 +313,8 @@ function ControlsBar({
       </HotkeyTooltip>
 
       <HotkeyTooltip
-        label={isCameraOff ? "Turn on camera" : "Turn off camera"}
-        hotkey="Mod+E"
+        label={HOTKEYS.toggleCamera.label}
+        hotkey={HOTKEYS.toggleCamera.keys}
       >
         <button
           onClick={onToggleCamera}
@@ -531,8 +532,8 @@ function ControlsBar({
       )}
 
       <HotkeyTooltip
-        label={isHandRaised ? "Lower hand" : "Raise hand"}
-        hotkey="Mod+Alt+H"
+        label={HOTKEYS.toggleHandRaise.label}
+        hotkey={HOTKEYS.toggleHandRaise.keys}
       >
         <button
           onClick={onToggleHandRaised}
@@ -641,7 +642,7 @@ function ControlsBar({
         )}
       </div>
 
-      <HotkeyTooltip label="Chat" hotkey="Mod+Alt+C">
+      <HotkeyTooltip label={HOTKEYS.toggleChat.label} hotkey={HOTKEYS.toggleChat.keys}>
         <button
           onClick={onToggleChat}
           className={`relative ${isChatOpen ? activeButtonClass : defaultButtonClass}`}

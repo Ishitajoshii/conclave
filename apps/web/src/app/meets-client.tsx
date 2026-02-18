@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
+import type { RegisterableHotkey } from "@tanstack/hotkeys";
+import { HOTKEYS } from "./lib/hotkeys";
 import type { Socket } from "socket.io-client";
 import type { RoomInfo } from "@/lib/sfu-types";
 import { signOut } from "@/lib/auth-client";
@@ -148,7 +150,7 @@ export default function MeetsClient({
     toggleMuteCommandRef.current?.();
   }, []);
 
-  useHotkey("Mod+D", handleToggleMuteCommand, {
+  useHotkey(HOTKEYS.toggleMute.keys as RegisterableHotkey, handleToggleMuteCommand, {
     enabled: connectionState === "joined",
   });
 
@@ -358,19 +360,19 @@ export default function MeetsClient({
   // Keyboard Shortcuts
   // ============================================
 
-  useHotkey("Mod+E", handleToggleCameraCommand, {
+  useHotkey(HOTKEYS.toggleCamera.keys as RegisterableHotkey, handleToggleCameraCommand, {
     enabled: connectionState === "joined",
   });
 
-  useHotkey("Mod+Alt+H", toggleHandRaised, {
+  useHotkey(HOTKEYS.toggleHandRaise.keys as RegisterableHotkey, toggleHandRaised, {
     enabled: connectionState === "joined",
   });
 
-  useHotkey("Mod+Alt+C", toggleChat, {
+  useHotkey(HOTKEYS.toggleChat.keys as RegisterableHotkey, toggleChat, {
     enabled: connectionState === "joined",
   });
 
-  useHotkey("Mod+Alt+P", () => setIsParticipantsOpen((prev) => !prev), {
+  useHotkey(HOTKEYS.toggleParticipants.keys as RegisterableHotkey, () => setIsParticipantsOpen((prev) => !prev), {
     enabled: connectionState === "joined",
   });
 
