@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useHotkey } from "@tanstack/react-hotkeys";
+import type { RegisterableHotkey } from "@tanstack/hotkeys";
+import { HOTKEYS } from "./lib/hotkeys";
 import type { Socket } from "socket.io-client";
 import type { RoomInfo } from "@/lib/sfu-types";
 import { signOut } from "@/lib/auth-client";
@@ -146,6 +149,12 @@ export default function MeetsClient({
   const handleToggleMuteCommand = useCallback(() => {
     toggleMuteCommandRef.current?.();
   }, []);
+
+  useHotkey(HOTKEYS.toggleMute.keys as RegisterableHotkey, handleToggleMuteCommand, {
+    enabled: connectionState === "joined",
+    requireReset: true,
+    ignoreInputs: true,
+  });
 
   const handleToggleCameraCommand = useCallback(() => {
     toggleCameraCommandRef.current?.();
@@ -348,6 +357,34 @@ export default function MeetsClient({
   useEffect(() => {
     setHandRaisedCommandRef.current = setHandRaisedState;
   }, [setHandRaisedState]);
+
+  // ============================================
+  // Keyboard Shortcuts
+  // ============================================
+
+  useHotkey(HOTKEYS.toggleCamera.keys as RegisterableHotkey, handleToggleCameraCommand, {
+    enabled: connectionState === "joined",
+    requireReset: true,
+    ignoreInputs: true,
+  });
+
+  useHotkey(HOTKEYS.toggleHandRaise.keys as RegisterableHotkey, toggleHandRaised, {
+    enabled: connectionState === "joined",
+    requireReset: true,
+    ignoreInputs: true,
+  });
+
+  useHotkey(HOTKEYS.toggleChat.keys as RegisterableHotkey, toggleChat, {
+    enabled: connectionState === "joined",
+    requireReset: true,
+    ignoreInputs: true,
+  });
+
+  useHotkey(HOTKEYS.toggleParticipants.keys as RegisterableHotkey, () => setIsParticipantsOpen((prev) => !prev), {
+    enabled: connectionState === "joined",
+    requireReset: true,
+    ignoreInputs: true,
+  });
 
   const socket = useMeetSocket({
     refs,
