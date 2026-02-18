@@ -145,7 +145,7 @@ export function WhiteboardWebApp() {
                 }}
               >
                 <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="font-medium">{states.length} online</span>
+                {/* <span className="font-medium">{states.length} online</span> */}
               </div>
               {locked ? (
                 <div
