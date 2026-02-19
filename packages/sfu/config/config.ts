@@ -39,6 +39,7 @@ type ClientPolicy = {
   allowNonHostRoomCreation: boolean;
   allowHostJoin: boolean;
   useWaitingRoom: boolean;
+  allowDisplayNameUpdate: boolean;
 };
 
 const defaultClientPolicies: Record<string, ClientPolicy> = {
@@ -46,16 +47,19 @@ const defaultClientPolicies: Record<string, ClientPolicy> = {
     allowNonHostRoomCreation: false,
     allowHostJoin: true,
     useWaitingRoom: true,
+    allowDisplayNameUpdate: false,
   },
   public: {
     allowNonHostRoomCreation: false,
     allowHostJoin: false,
     useWaitingRoom: false,
+    allowDisplayNameUpdate: true,
   },
   internal: {
     allowNonHostRoomCreation: false,
     allowHostJoin: true,
     useWaitingRoom: true,
+    allowDisplayNameUpdate: false,
   },
 };
 
@@ -99,6 +103,21 @@ export const config = {
       Number(process.env.VIDEO_QUALITY_STANDARD_THRESHOLD) || 8,
   },
   adminCleanupTimeout: Number(process.env.ADMIN_CLEANUP_TIMEOUT) || 120000,
+  socket: {
+    pingIntervalMs: toNumber(
+      process.env.SFU_SOCKET_PING_INTERVAL_MS,
+      25000,
+    ),
+    pingTimeoutMs: toNumber(process.env.SFU_SOCKET_PING_TIMEOUT_MS, 60000),
+    disconnectGraceMs: toNumber(
+      process.env.SFU_SOCKET_DISCONNECT_GRACE_MS,
+      15000,
+    ),
+    recoveryMaxDisconnectionMs: toNumber(
+      process.env.SFU_SOCKET_RECOVERY_MAX_MS,
+      30000,
+    ),
+  },
   routerMediaCodecs: [
     {
       kind: "audio",

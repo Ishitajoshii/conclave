@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "jsx": "react",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@conclave/apps-sdk": [
+        "../../packages/apps-sdk/src/index.ts"
+      ],
+      "@conclave/apps-sdk/*": [
+        "../../packages/apps-sdk/src/*"
+      ],
+      "@conclave/apps-sdk/whiteboard/native": [
+        "../../packages/apps-sdk/src/apps/whiteboard/native/index.ts"
+      ],
+      "@conclave/apps-sdk/whiteboard/web": [
+        "../../packages/apps-sdk/src/apps/whiteboard/web/index.ts"
+      ],
+      "@conclave/apps-sdk/whiteboard/core": [
+        "../../packages/apps-sdk/src/apps/whiteboard/core/index.ts"
+      ],
+      "@conclave/apps-sdk/dev-playground/web": [
+        "../../packages/apps-sdk/src/apps/dev-playground/web/index.ts"
+      ],
+      "@conclave/apps-sdk/dev-playground/core": [
+        "../../packages/apps-sdk/src/apps/dev-playground/core/index.ts"
+      ]
+    }
+  },
+  "extends": "expo/tsconfig.base",
+  "include": [
+    "global.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    "nativewind-env.d.ts"
+  ]
+}

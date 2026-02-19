@@ -67,6 +67,14 @@ export interface ConnectTransportData {
   dtlsParameters: DtlsParameters;
 }
 
+export interface RestartIceData {
+  transport: "producer" | "consumer";
+}
+
+export interface RestartIceResponse {
+  iceParameters: object;
+}
+
 export interface ProduceData {
   transportId: string;
   kind: MediaKind;
@@ -209,6 +217,63 @@ export interface BrowserStateNotification {
 
 export interface BrowserClosedNotification {
   closedBy?: string;
+}
+
+// ============================================
+// Apps (SDK) Types
+// ============================================
+
+export interface AppsState {
+  activeAppId: string | null;
+  locked: boolean;
+}
+
+export interface AppsOpenData {
+  appId: string;
+  options?: Record<string, unknown>;
+}
+
+export interface AppsOpenResponse {
+  success: boolean;
+  activeAppId?: string;
+  error?: string;
+}
+
+export interface AppsCloseResponse {
+  success: boolean;
+  error?: string;
+}
+
+export interface AppsLockData {
+  locked: boolean;
+}
+
+export interface AppsLockResponse {
+  success: boolean;
+  locked?: boolean;
+  error?: string;
+}
+
+export interface AppsSyncData {
+  appId: string;
+  syncMessage: Uint8Array;
+}
+
+export interface AppsSyncResponse {
+  syncMessage: Uint8Array;
+  stateVector?: Uint8Array;
+  awarenessUpdate?: Uint8Array;
+}
+
+export interface AppsUpdateData {
+  appId: string;
+  update: Uint8Array;
+}
+
+export interface AppsAwarenessData {
+  appId: string;
+  awarenessUpdate: Uint8Array;
+  clientId?: number;
 }
 
 // ============================================

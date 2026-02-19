@@ -1,0 +1,34 @@
+{
+  "name": "@conclave/apps-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "new:app": "node ./scripts/create-app-integration.mjs",
+    "check:apps": "node ./scripts/check-app-integrations.mjs",
+    "check:apps:fix": "node ./scripts/check-app-integrations.mjs --fix"
+  },
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./dev-playground/core": "./src/apps/dev-playground/core/index.ts",
+    "./dev-playground/web": "./src/apps/dev-playground/web/index.ts",
+    "./whiteboard/core": "./src/apps/whiteboard/core/index.ts",
+    "./whiteboard/native": "./src/apps/whiteboard/native/index.ts",
+    "./whiteboard/web": "./src/apps/whiteboard/web/index.ts"
+  },
+  "dependencies": {
+    "yjs": "^13.6.19",
+    "y-protocols": "^1.0.6",
+    "lib0": "^0.2.85"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "socket.io-client": "*",
+    "react-native": "*",
+    "@shopify/react-native-skia": "*",
+    "lucide-react-native": "*",
+    "react-native-svg": "*"
+  }
+}

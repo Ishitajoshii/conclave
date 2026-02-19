@@ -39,7 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
 /app/generated/
 /sfu/certs/cert.key
 /sfu/certs/cert.crt
@@ -47,3 +46,14 @@ next-env.d.ts
 .next
 apps/web/node_modules
 packages/*/node_modules
+.build
+.swiftpm
+ # Xcode
+DerivedData
+*.xcuserstate
+xcuserdata
+*.moved-aside
+*.xcworkspace/xcuserdata
+apps/conclave-skip/.deps
+.xcode-packages
+apps/mobile/config/GoogleOAuth.plist
