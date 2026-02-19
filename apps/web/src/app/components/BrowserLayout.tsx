@@ -7,6 +7,7 @@ import {
     getSpeakerHighlightClasses,
     isSystemUserId,
     normalizeBrowserUrl,
+    prioritizeActiveSpeaker,
     resolveNoVncUrl,
 } from "../lib/utils";
 import ParticipantVideo from "./ParticipantVideo";
@@ -108,6 +109,12 @@ function BrowserLayout({
     })();
 
     const resolvedNoVncUrl = resolveNoVncUrl(noVncUrl);
+    const remoteParticipants = prioritizeActiveSpeaker(
+        Array.from(participants.values()).filter(
+            (participant) => !isSystemUserId(participant.userId)
+        ),
+        activeSpeakerId
+    );
 
     return (
         <div className="flex flex-1 min-h-0 min-w-0 gap-4 overflow-hidden">
@@ -273,9 +280,7 @@ function BrowserLayout({
                     </div>
                 </div>
 
-                {Array.from(participants.values())
-                    .filter((participant) => !isSystemUserId(participant.userId))
-                    .map((participant) => (
+                {remoteParticipants.map((participant) => (
                         <ParticipantVideo
                             key={participant.userId}
                             participant={participant}

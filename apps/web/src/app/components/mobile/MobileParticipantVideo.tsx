@@ -25,38 +25,87 @@ function MobileParticipantVideo({
 
   useEffect(() => {
     const video = videoRef.current;
-    if (video && participant.videoStream) {
+    if (!video) return;
+
+    if (!participant.videoStream || participant.isCameraOff) {
+      if (video.srcObject) {
+        video.srcObject = null;
+      }
+      return;
+    }
+
+    if (video.srcObject !== participant.videoStream) {
       video.srcObject = participant.videoStream;
+    }
+
+    const playVideo = () => {
       video.play().catch((err) => {
         if (err.name !== "AbortError") {
           console.error("[Meets] Mobile video play error:", err);
         }
       });
-    }
-  }, [participant.videoStream]);
+    };
+
+    playVideo();
+
+    const videoTrack = participant.videoStream.getVideoTracks()[0];
+    if (!videoTrack) return;
+    videoTrack.addEventListener("unmute", playVideo);
+
+    return () => {
+      videoTrack.removeEventListener("unmute", playVideo);
+    };
+  }, [participant.videoStream, participant.videoProducerId, participant.isCameraOff]);
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (audio && participant.audioStream) {
+    if (!audio) return;
+
+    if (!participant.audioStream) {
+      if (audio.srcObject) {
+        audio.srcObject = null;
+      }
+      return;
+    }
+
+    if (audio.srcObject !== participant.audioStream) {
       audio.srcObject = participant.audioStream;
+    }
+
+    const playAudio = () => {
       audio.play().catch((err) => {
         if (err.name !== "AbortError") {
           console.error("[Meets] Mobile audio play error:", err);
         }
       });
+    };
 
-      if (audioOutputDeviceId) {
-        const audioElement = audio as HTMLAudioElement & {
-          setSinkId?: (sinkId: string) => Promise<void>;
-        };
-        if (audioElement.setSinkId) {
-          audioElement.setSinkId(audioOutputDeviceId).catch((err) => {
-            console.error("[Meets] Failed to set audio output:", err);
-          });
-        }
+    playAudio();
+
+    if (audioOutputDeviceId) {
+      const audioElement = audio as HTMLAudioElement & {
+        setSinkId?: (sinkId: string) => Promise<void>;
+      };
+      if (audioElement.setSinkId) {
+        audioElement.setSinkId(audioOutputDeviceId).catch((err) => {
+          console.error("[Meets] Failed to set audio output:", err);
+        });
       }
     }
-  }, [participant.audioStream, audioOutputDeviceId]);
+
+    const audioTrack = participant.audioStream.getAudioTracks()[0];
+    if (!audioTrack) return;
+    audioTrack.addEventListener("unmute", playAudio);
+
+    return () => {
+      audioTrack.removeEventListener("unmute", playAudio);
+    };
+  }, [
+    participant.audioStream,
+    participant.audioProducerId,
+    participant.isMuted,
+    audioOutputDeviceId,
+  ]);
 
   const showPlaceholder = !participant.videoStream || participant.isCameraOff;
 

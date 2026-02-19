@@ -4,7 +4,11 @@ import { Ghost, Hand } from "lucide-react";
 import { memo, useEffect, useRef } from "react";
 import { WhiteboardWebApp } from "@conclave/apps-sdk/whiteboard/web";
 import type { Participant } from "../lib/types";
-import { getSpeakerHighlightClasses, isSystemUserId } from "../lib/utils";
+import {
+  getSpeakerHighlightClasses,
+  isSystemUserId,
+  prioritizeActiveSpeaker,
+} from "../lib/utils";
 import ParticipantVideo from "./ParticipantVideo";
 
 interface WhiteboardLayoutProps {
@@ -51,9 +55,13 @@ function WhiteboardLayout({
     }
   }, [localStream]);
 
-  const participantsList = Array.from(participants.values()).filter(
-    (participant) =>
-      !isSystemUserId(participant.userId) && participant.userId !== currentUserId
+  const participantsList = prioritizeActiveSpeaker(
+    Array.from(participants.values()).filter(
+      (participant) =>
+        !isSystemUserId(participant.userId) &&
+        participant.userId !== currentUserId
+    ),
+    activeSpeakerId
   );
 
   return (

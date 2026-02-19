@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Participant } from "../lib/types";
-import { isSystemUserId } from "../lib/utils";
+import { isSystemUserId, prioritizeActiveSpeaker } from "../lib/utils";
 
 
 interface DocumentPictureInPictureWindow extends Window {
@@ -352,18 +352,23 @@ export function useMeetPopout({
       isActiveSpeaker: activeSpeakerId === currentUserId,
     });
 
-    for (const [userId, participant] of participants) {
-      if (userId === currentUserId || isSystemUserId(userId)) continue;
-      visible.push({
-        userId,
-        displayName: getDisplayName(userId),
-        videoStream: participant.videoStream ?? null,
-        isCameraOff: participant.isCameraOff,
-        isMuted: participant.isMuted,
-        isLocal: false,
-        isActiveSpeaker: activeSpeakerId === userId,
-      });
-    }
+    const remoteParticipants = prioritizeActiveSpeaker(
+      Array.from(participants.entries())
+        .filter(
+          ([userId]) => userId !== currentUserId && !isSystemUserId(userId)
+        )
+        .map(([userId, participant]) => ({
+          userId,
+          displayName: getDisplayName(userId),
+          videoStream: participant.videoStream ?? null,
+          isCameraOff: participant.isCameraOff,
+          isMuted: participant.isMuted,
+          isLocal: false,
+          isActiveSpeaker: activeSpeakerId === userId,
+        })),
+      activeSpeakerId
+    );
+    visible.push(...remoteParticipants);
 
     return visible;
   }, [
@@ -458,9 +463,9 @@ export function useMeetPopout({
         avatar.style.display = "none";
         if (video.srcObject !== participant.videoStream) {
           video.srcObject = participant.videoStream;
-          video.play().catch(() => {});
           videoElementsRef.current.set(participant.userId, video);
         }
+        video.play().catch(() => {});
         if (participant.isLocal) {
           video.style.transform = "scaleX(-1)";
         }

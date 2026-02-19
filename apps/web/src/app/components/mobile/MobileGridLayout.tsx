@@ -3,7 +3,11 @@
 import { Ghost, Hand, MicOff } from "lucide-react";
 import { memo, useEffect, useRef } from "react";
 import type { Participant } from "../../lib/types";
-import { isSystemUserId, truncateDisplayName } from "../../lib/utils";
+import {
+  isSystemUserId,
+  prioritizeActiveSpeaker,
+  truncateDisplayName,
+} from "../../lib/utils";
 
 interface MobileGridLayoutProps {
   localStream: MediaStream | null;
@@ -48,8 +52,11 @@ function MobileGridLayout({
     }
   }, [localStream]);
 
-  const participantArray = Array.from(participants.values()).filter(
-    (participant) => !isSystemUserId(participant.userId)
+  const participantArray = prioritizeActiveSpeaker(
+    Array.from(participants.values()).filter(
+      (participant) => !isSystemUserId(participant.userId)
+    ),
+    activeSpeakerId
   );
   const totalCount = participantArray.length + 1;
 
@@ -145,19 +152,63 @@ const ParticipantTile = memo(function ParticipantTile({
 
   useEffect(() => {
     const video = videoRef.current;
-    if (video && participant.videoStream) {
-      video.srcObject = participant.videoStream;
-      video.play().catch(() => {});
+    if (!video) return;
+
+    if (!participant.videoStream || participant.isCameraOff) {
+      if (video.srcObject) {
+        video.srcObject = null;
+      }
+      return;
     }
-  }, [participant.videoStream]);
+
+    if (video.srcObject !== participant.videoStream) {
+      video.srcObject = participant.videoStream;
+    }
+
+    const playVideo = () => {
+      video.play().catch(() => {});
+    };
+
+    playVideo();
+
+    const videoTrack = participant.videoStream.getVideoTracks()[0];
+    if (!videoTrack) return;
+    videoTrack.addEventListener("unmute", playVideo);
+
+    return () => {
+      videoTrack.removeEventListener("unmute", playVideo);
+    };
+  }, [participant.videoStream, participant.videoProducerId, participant.isCameraOff]);
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (audio && participant.audioStream) {
-      audio.srcObject = participant.audioStream;
-      audio.play().catch(() => {});
+    if (!audio) return;
+
+    if (!participant.audioStream) {
+      if (audio.srcObject) {
+        audio.srcObject = null;
+      }
+      return;
     }
-  }, [participant.audioStream]);
+
+    if (audio.srcObject !== participant.audioStream) {
+      audio.srcObject = participant.audioStream;
+    }
+
+    const playAudio = () => {
+      audio.play().catch(() => {});
+    };
+
+    playAudio();
+
+    const audioTrack = participant.audioStream.getAudioTracks()[0];
+    if (!audioTrack) return;
+    audioTrack.addEventListener("unmute", playAudio);
+
+    return () => {
+      audioTrack.removeEventListener("unmute", playAudio);
+    };
+  }, [participant.audioStream, participant.audioProducerId, participant.isMuted]);
 
   const showPlaceholder = !participant.videoStream || participant.isCameraOff;
   const speakerRing = isActiveSpeaker ? "ring-2 ring-[#F95F4A]" : "";

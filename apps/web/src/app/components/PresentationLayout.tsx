@@ -3,7 +3,11 @@
 import { Ghost, Hand } from "lucide-react";
 import { memo, useEffect, useRef } from "react";
 import type { Participant } from "../lib/types";
-import { getSpeakerHighlightClasses, isSystemUserId } from "../lib/utils";
+import {
+  getSpeakerHighlightClasses,
+  isSystemUserId,
+  prioritizeActiveSpeaker,
+} from "../lib/utils";
 import ParticipantVideo from "./ParticipantVideo";
 
 interface PresentationLayoutProps {
@@ -66,6 +70,13 @@ function PresentationLayout({
       }
     }
   }, [presentationStream]);
+
+  const remoteParticipants = prioritizeActiveSpeaker(
+    Array.from(participants.values()).filter(
+      (participant) => !isSystemUserId(participant.userId)
+    ),
+    activeSpeakerId
+  );
 
   return (
     <div className="flex flex-1 gap-4 overflow-hidden">
@@ -131,9 +142,7 @@ function PresentationLayout({
           </div>
         </div>
 
-        {Array.from(participants.values())
-          .filter((participant) => !isSystemUserId(participant.userId))
-          .map((participant) => (
+        {remoteParticipants.map((participant) => (
             <ParticipantVideo
               key={participant.userId}
               participant={participant}

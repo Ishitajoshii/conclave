@@ -244,6 +244,24 @@ export function getSpeakerHighlightClasses(isActive: boolean): string {
     : "";
 }
 
+export function prioritizeActiveSpeaker<T extends { userId: string }>(
+  participants: readonly T[],
+  activeSpeakerId: string | null
+): T[] {
+  if (!activeSpeakerId) return [...participants];
+  const activeIndex = participants.findIndex(
+    (participant) => participant.userId === activeSpeakerId
+  );
+  if (activeIndex <= 0) return [...participants];
+
+  const ordered = [...participants];
+  const [activeParticipant] = ordered.splice(activeIndex, 1);
+  if (activeParticipant) {
+    ordered.unshift(activeParticipant);
+  }
+  return ordered;
+}
+
 export function normalizeBrowserUrl(
   raw: string
 ): { url?: string; error?: string } {

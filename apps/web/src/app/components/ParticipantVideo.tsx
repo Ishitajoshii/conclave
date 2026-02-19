@@ -1,7 +1,7 @@
 "use client";
 
 import { Ghost, Hand, Info, MicOff } from "lucide-react";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { Participant } from "../lib/types";
 import { truncateDisplayName } from "../lib/utils";
 
@@ -37,50 +37,67 @@ function ParticipantVideo({
     return () => clearTimeout(timer);
   }, []);
 
-  const setVideoRef = useCallback(
-    (node: HTMLVideoElement | null) => {
-      if (node && participant.videoStream) {
-        node.srcObject = participant.videoStream;
-        node.play().catch((err) => {
-          if (err.name !== "AbortError") {
-            console.error("[Meets] Video play error:", err);
-          }
-        });
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (!participant.videoStream || participant.isCameraOff) {
+      if (video.srcObject) {
+        video.srcObject = null;
       }
-      videoRef.current = node;
-    },
-    [participant.videoStream]
-  );
+      return;
+    }
 
-  const setAudioRef = useCallback(
-    (node: HTMLAudioElement | null) => {
-      if (node && participant.audioStream) {
-        node.srcObject = participant.audioStream;
-        node.play().catch((err) => {
-          if (err.name !== "AbortError") {
-            console.error("[Meets] Audio play error:", err);
-          }
-        });
+    if (video.srcObject !== participant.videoStream) {
+      video.srcObject = participant.videoStream;
+    }
 
-        if (audioOutputDeviceId) {
-          const audioElement = node as HTMLAudioElement & {
-            setSinkId?: (sinkId: string) => Promise<void>;
-          };
-          if (audioElement.setSinkId) {
-            audioElement.setSinkId(audioOutputDeviceId).catch((err) => {
-              console.error("[Meets] Failed to set audio output:", err);
-            });
-          }
+    const playVideo = () => {
+      video.play().catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error("[Meets] Video play error:", err);
         }
-      }
-      audioRef.current = node;
-    },
-    [participant.audioStream, audioOutputDeviceId]
-  );
+      });
+    };
+
+    playVideo();
+
+    const videoTrack = participant.videoStream.getVideoTracks()[0];
+    if (!videoTrack) return;
+    videoTrack.addEventListener("unmute", playVideo);
+
+    return () => {
+      videoTrack.removeEventListener("unmute", playVideo);
+    };
+  }, [participant.videoStream, participant.videoProducerId, participant.isCameraOff]);
 
   useEffect(() => {
-    if (audioRef.current && audioOutputDeviceId) {
-      const audioElement = audioRef.current as HTMLAudioElement & {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (!participant.audioStream) {
+      if (audio.srcObject) {
+        audio.srcObject = null;
+      }
+      return;
+    }
+
+    if (audio.srcObject !== participant.audioStream) {
+      audio.srcObject = participant.audioStream;
+    }
+
+    const playAudio = () => {
+      audio.play().catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error("[Meets] Audio play error:", err);
+        }
+      });
+    };
+
+    playAudio();
+
+    if (audioOutputDeviceId) {
+      const audioElement = audio as HTMLAudioElement & {
         setSinkId?: (sinkId: string) => Promise<void>;
       };
       if (audioElement.setSinkId) {
@@ -89,7 +106,20 @@ function ParticipantVideo({
         });
       }
     }
-  }, [audioOutputDeviceId]);
+
+    const audioTrack = participant.audioStream.getAudioTracks()[0];
+    if (!audioTrack) return;
+    audioTrack.addEventListener("unmute", playAudio);
+
+    return () => {
+      audioTrack.removeEventListener("unmute", playAudio);
+    };
+  }, [
+    participant.audioStream,
+    participant.audioProducerId,
+    participant.isMuted,
+    audioOutputDeviceId,
+  ]);
 
   const showPlaceholder = !participant.videoStream || participant.isCameraOff;
 
@@ -120,7 +150,7 @@ function ParticipantVideo({
       style={{ fontFamily: "'PolySans Trial', sans-serif" }}
     >
       <video
-        ref={setVideoRef}
+        ref={videoRef}
         autoPlay
         playsInline
         className={`w-full h-full object-cover ${
@@ -160,7 +190,7 @@ function ParticipantVideo({
           </div>
         </div>
       )}
-      <audio ref={setAudioRef} autoPlay />
+      <audio ref={audioRef} autoPlay />
       {participant.isHandRaised && (
         <div
           className={`absolute top-3 left-3 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 shadow-[0_0_15px_rgba(251,191,36,0.3)] ${

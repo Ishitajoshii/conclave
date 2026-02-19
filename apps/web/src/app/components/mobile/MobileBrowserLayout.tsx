@@ -6,6 +6,7 @@ import type { Participant } from "../../lib/types";
 import {
   isSystemUserId,
   normalizeBrowserUrl,
+  prioritizeActiveSpeaker,
   resolveNoVncUrl,
 } from "../../lib/utils";
 
@@ -40,6 +41,7 @@ function MobileBrowserLayout({
   participants,
   userEmail,
   isMirrorCamera,
+  activeSpeakerId,
   getDisplayName,
   isAdmin,
   isBrowserLaunching = false,
@@ -72,8 +74,11 @@ function MobileBrowserLayout({
     setNavInput(browserUrl);
   }, [browserUrl]);
 
-  const participantArray = Array.from(participants.values()).filter(
-    (participant) => !isSystemUserId(participant.userId)
+  const participantArray = prioritizeActiveSpeaker(
+    Array.from(participants.values()).filter(
+      (participant) => !isSystemUserId(participant.userId)
+    ),
+    activeSpeakerId
   );
 
   const displayUrl = (() => {
@@ -211,10 +216,17 @@ function MobileBrowserLayout({
         {participantArray.map((participant) => (
           <div
             key={participant.userId}
-            className="relative w-24 h-24 shrink-0 bg-[#1a1a1a] rounded-xl overflow-hidden border border-[#FEFCD9]/10"
+            className={`relative w-24 h-24 shrink-0 bg-[#1a1a1a] rounded-xl overflow-hidden border ${
+              participant.userId === activeSpeakerId
+                ? "border-[#F95F4A]/70 ring-1 ring-[#F95F4A]/40"
+                : "border-[#FEFCD9]/10"
+            }`}
           >
             {participant.videoStream && !participant.isCameraOff ? (
-              <VideoThumbnail participant={participant} />
+              <VideoThumbnail
+                participant={participant}
+                isCameraOff={participant.isCameraOff}
+              />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#1a1a1a] to-[#0d0e0d]">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#F95F4A]/20 to-[#FF007A]/20 border border-[#FEFCD9]/20 flex items-center justify-center text-lg text-[#FEFCD9] font-bold">
@@ -248,18 +260,42 @@ function MobileBrowserLayout({
 
 const VideoThumbnail = memo(function VideoThumbnail({
   participant,
+  isCameraOff,
 }: {
   participant: Participant;
+  isCameraOff: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (video && participant.videoStream) {
-      video.srcObject = participant.videoStream;
-      video.play().catch(() => {});
+    if (!video) return;
+
+    if (!participant.videoStream || isCameraOff) {
+      if (video.srcObject) {
+        video.srcObject = null;
+      }
+      return;
     }
-  }, [participant.videoStream]);
+
+    if (video.srcObject !== participant.videoStream) {
+      video.srcObject = participant.videoStream;
+    }
+
+    const playVideo = () => {
+      video.play().catch(() => {});
+    };
+
+    playVideo();
+
+    const videoTrack = participant.videoStream.getVideoTracks()[0];
+    if (!videoTrack) return;
+    videoTrack.addEventListener("unmute", playVideo);
+
+    return () => {
+      videoTrack.removeEventListener("unmute", playVideo);
+    };
+  }, [participant.videoStream, participant.videoProducerId, isCameraOff]);
 
   return (
     <video
