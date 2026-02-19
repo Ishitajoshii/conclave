@@ -56,15 +56,18 @@ function BrowserLayout({
     const browserVideoRef = useRef<HTMLVideoElement>(null);
     const isLocalActiveSpeaker = activeSpeakerId === currentUserId;
     const [isReady, setIsReady] = useState(false);
-    const [navInput, setNavInput] = useState(browserUrl);
+    const [navDraft, setNavDraft] = useState(() => ({
+        sourceUrl: browserUrl,
+        value: browserUrl,
+    }));
     const [navError, setNavError] = useState<string | null>(null);
+    const navInput = navDraft.sourceUrl === browserUrl ? navDraft.value : browserUrl;
 
-    // Wait for browser container to be ready before showing iframe
     useEffect(() => {
         if (noVncUrl) {
             const timer = setTimeout(() => {
                 setIsReady(true);
-            }, 3000); // Wait 3 seconds for container to stabilize
+            }, 3000);
             return () => clearTimeout(timer);
         }
     }, [noVncUrl]);
@@ -92,10 +95,6 @@ function BrowserLayout({
             });
         }
     }, [browserVideoStream]);
-
-    useEffect(() => {
-        setNavInput(browserUrl);
-    }, [browserUrl]);
 
     // Extract domain from URL for display
     const displayUrl = (() => {
@@ -132,7 +131,10 @@ function BrowserLayout({
                                 type="text"
                                 value={navInput}
                                 onChange={(event) => {
-                                    setNavInput(event.target.value);
+                                    setNavDraft({
+                                        sourceUrl: browserUrl,
+                                        value: event.target.value,
+                                    });
                                     if (navError) {
                                         setNavError(null);
                                     }

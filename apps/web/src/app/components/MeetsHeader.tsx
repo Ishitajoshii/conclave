@@ -2,7 +2,7 @@
 
 import { Copy } from "lucide-react";
 import Image from "next/image";
-import { memo, useEffect, useState } from "react";
+import { memo, useState } from "react";
 import VideoSettings from "./video-settings";
 
 interface MeetsHeaderProps {
@@ -54,19 +54,15 @@ function MeetsHeader({
   isSigningOut,
   onSignOut,
 }: MeetsHeaderProps) {
-  const [shareUrl, setShareUrl] = useState("");
   const [isCopied, setIsCopied] = useState(false);
-  const [isShareVisible, setIsShareVisible] = useState(true);
-
-  useEffect(() => {
-    if (!roomId || typeof window === "undefined") {
-      setShareUrl("");
-      setIsShareVisible(true);
-      return;
-    }
-    setShareUrl(`${window.location.origin}/${roomId}`);
-    setIsShareVisible(true);
-  }, [roomId]);
+  const [hiddenShareRoomId, setHiddenShareRoomId] = useState<string | null>(
+    null
+  );
+  const shareUrl =
+    roomId && typeof window !== "undefined"
+      ? `${window.location.origin}/${roomId}`
+      : "";
+  const isShareVisible = hiddenShareRoomId !== roomId;
 
   const handleCopyLink = async () => {
     const target = shareUrl || `/${roomId}`;
@@ -74,7 +70,7 @@ function MeetsHeader({
       await navigator.clipboard.writeText(target);
       setIsCopied(true);
       window.setTimeout(() => setIsCopied(false), 2000);
-      setIsShareVisible(false);
+      setHiddenShareRoomId(roomId);
     } catch (_error) {
       setIsCopied(false);
     }
