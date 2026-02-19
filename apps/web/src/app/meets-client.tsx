@@ -492,21 +492,21 @@ export default function MeetsClient({
   const handleSignOut = useCallback(async () => {
     if (isSigningOut) return;
     setIsSigningOut(true);
-    await signOut()
-      .then(() => {
-        setCurrentUser(undefined);
-        setCurrentIsAdmin(false);
-      })
-      .catch((error) => {
-        console.error("Sign out error:", error);
-      });
-    setIsSigningOut(false);
+    try {
+      await signOut();
+      setCurrentUser(undefined);
+      setCurrentIsAdmin(false);
+    } catch (error) {
+      console.error("Sign out error:", error);
+    } finally {
+      setIsSigningOut(false);
+    }
   }, [isSigningOut]);
 
   const leaveRoom = useCallback(() => {
     playNotificationSound("leave");
     socket.cleanup();
-  }, [playNotificationSound, socket]);
+  }, [playNotificationSound, socket.cleanup]);
 
   useEffect(() => {
     leaveRoomCommandRef.current = leaveRoom;
@@ -521,12 +521,14 @@ export default function MeetsClient({
     setBrowserAudioNeedsGesture(true);
   }, []);
 
-  const checkBrowserService = useCallback(async (signal?: AbortSignal) => {
-    await fetch("/api/shared-browser/health", {
-      cache: "no-store",
-      signal,
-    })
-      .then(async (response) => {
+  useEffect(() => {
+    let isMounted = true;
+    const checkBrowserService = async () => {
+      try {
+        const response = await fetch("/api/shared-browser/health", {
+          cache: "no-store",
+        });
+        if (!isMounted) return;
         if (!response.ok) {
           setIsBrowserServiceAvailable(false);
           return;
@@ -535,28 +537,20 @@ export default function MeetsClient({
           | { ok?: boolean }
           | null;
         setIsBrowserServiceAvailable(Boolean(data?.ok));
-      })
-      .catch(() => {
-        if (!signal?.aborted) {
+      } catch (_error) {
+        if (isMounted) {
           setIsBrowserServiceAvailable(false);
         }
-      });
-  }, []);
+      }
+    };
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => {
-      void checkBrowserService(controller.signal);
-    }, 0);
-    const interval = setInterval(() => {
-      void checkBrowserService(controller.signal);
-    }, 30000);
+    checkBrowserService();
+    const interval = setInterval(checkBrowserService, 30000);
     return () => {
-      window.clearTimeout(timeout);
-      controller.abort();
+      isMounted = false;
       clearInterval(interval);
     };
-  }, [checkBrowserService]);
+  }, []);
 
   const screenTrack = refs.screenProducerRef.current?.track;
   const localScreenShareStream = useMemo(() => {

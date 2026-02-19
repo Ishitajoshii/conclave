@@ -28,22 +28,21 @@ function MobileChatPanel({
 }: MobileChatPanelProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [commandSelection, setCommandSelection] = useState(() => ({
-    input: chatInput,
-    index: 0,
-  }));
+  const [activeCommandIndex, setActiveCommandIndex] = useState(0);
 
   const commandSuggestions = getCommandSuggestions(chatInput);
   const showCommandSuggestions =
     !isGhostMode && chatInput.startsWith("/") && commandSuggestions.length > 0;
   const isPickingCommand =
     showCommandSuggestions && !chatInput.slice(1).includes(" ");
-  const activeCommandIndex =
-    commandSelection.input === chatInput ? commandSelection.index : 0;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    setActiveCommandIndex(0);
+  }, [chatInput]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,26 +56,16 @@ function MobileChatPanel({
     if (showCommandSuggestions) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setCommandSelection((prev) => {
-          const currentIndex = prev.input === chatInput ? prev.index : 0;
-          return {
-            input: chatInput,
-            index: (currentIndex + 1) % commandSuggestions.length,
-          };
-        });
+        setActiveCommandIndex((prev) =>
+          (prev + 1) % commandSuggestions.length
+        );
         return;
       }
       if (e.key === "ArrowUp") {
         e.preventDefault();
-        setCommandSelection((prev) => {
-          const currentIndex = prev.input === chatInput ? prev.index : 0;
-          return {
-            input: chatInput,
-            index:
-              (currentIndex - 1 + commandSuggestions.length) %
-              commandSuggestions.length,
-          };
-        });
+        setActiveCommandIndex((prev) =>
+          (prev - 1 + commandSuggestions.length) % commandSuggestions.length
+        );
         return;
       }
       if (isPickingCommand && (e.key === "Tab" || e.key === "Enter")) {

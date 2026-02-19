@@ -214,7 +214,7 @@ export function ChatPanel({
   const sheetRef = useRef<TrueSheet>(null);
   const listRef = useRef<RNFlatList<ChatMessage> | null>(null);
   const hasPresented = useRef(false);
-  const activeCommandIndex = 0;
+  const [activeCommandIndex, setActiveCommandIndex] = useState(0);
   const hasInitializedRef = useRef(false);
   const prevMessageIdsRef = useRef<Set<string>>(new Set());
 
@@ -248,6 +248,10 @@ export function ChatPanel({
     !isGhostMode && localValue.startsWith("/") && commandSuggestions.length > 0;
   const isPickingCommand =
     showCommandSuggestions && !localValue.slice(1).includes(" ");
+
+  useEffect(() => {
+    setActiveCommandIndex(0);
+  }, [localValue]);
 
   useEffect(() => {
     if (!messages.length) return;

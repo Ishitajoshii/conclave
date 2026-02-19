@@ -47,12 +47,8 @@ function MobileBrowserLayout({
 }: MobileBrowserLayoutProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const [isReady, setIsReady] = useState(false);
-  const [navDraft, setNavDraft] = useState(() => ({
-    sourceUrl: browserUrl,
-    value: browserUrl,
-  }));
+  const [navInput, setNavInput] = useState(browserUrl);
   const [navError, setNavError] = useState<string | null>(null);
-  const navInput = navDraft.sourceUrl === browserUrl ? navDraft.value : browserUrl;
 
   useEffect(() => {
     if (!noVncUrl) return;
@@ -71,6 +67,10 @@ function MobileBrowserLayout({
       });
     }
   }, [localStream]);
+
+  useEffect(() => {
+    setNavInput(browserUrl);
+  }, [browserUrl]);
 
   const participantArray = Array.from(participants.values()).filter(
     (participant) => !isSystemUserId(participant.userId)
@@ -109,10 +109,7 @@ function MobileBrowserLayout({
                 type="text"
                 value={navInput}
                 onChange={(event) => {
-                  setNavDraft({
-                    sourceUrl: browserUrl,
-                    value: event.target.value,
-                  });
+                  setNavInput(event.target.value);
                   if (navError) setNavError(null);
                 }}
                 placeholder="Navigate to a URL"
