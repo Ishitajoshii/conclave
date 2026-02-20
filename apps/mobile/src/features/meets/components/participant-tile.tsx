@@ -33,7 +33,7 @@ const hiddenAudioStyle = {
   opacity: 0,
 };
 
-export function ParticipantTile({
+function ParticipantTileComponent({
   participant,
   displayName,
   isLocal = false,
@@ -130,6 +130,35 @@ export function ParticipantTile({
     </RNView>
   );
 }
+
+const hasSameStream = (
+  left: MediaStream | null | undefined,
+  right: MediaStream | null | undefined
+) => {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return left.id === right.id;
+};
+
+const isSameParticipant = (left: Participant, right: Participant) =>
+  left.userId === right.userId &&
+  left.isMuted === right.isMuted &&
+  left.isCameraOff === right.isCameraOff &&
+  left.isHandRaised === right.isHandRaised &&
+  left.isGhost === right.isGhost &&
+  hasSameStream(left.videoStream, right.videoStream) &&
+  hasSameStream(left.audioStream, right.audioStream) &&
+  hasSameStream(left.screenShareStream, right.screenShareStream);
+
+export const ParticipantTile = React.memo(
+  ParticipantTileComponent,
+  (prevProps, nextProps) =>
+    prevProps.displayName === nextProps.displayName &&
+    prevProps.isLocal === nextProps.isLocal &&
+    prevProps.isActiveSpeaker === nextProps.isActiveSpeaker &&
+    prevProps.mirror === nextProps.mirror &&
+    isSameParticipant(prevProps.participant, nextProps.participant)
+);
 
 const styles = StyleSheet.create({
   outer: {

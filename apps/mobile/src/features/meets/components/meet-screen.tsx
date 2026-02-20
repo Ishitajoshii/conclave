@@ -97,6 +97,7 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
       }),
     []
   );
+  const [isAppActive, setIsAppActive] = useState(AppState.currentState === "active");
   const isAppActiveRef = useRef(AppState.currentState === "active");
   const wasCameraOnBeforeBackgroundRef = useRef(false);
   const wasMutedBeforeBackgroundRef = useRef(true);
@@ -391,6 +392,7 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
     const subscription = AppState.addEventListener("change", (state) => {
       const isActive = state === "active";
       isAppActiveRef.current = isActive;
+      setIsAppActive(isActive);
       if (!isJoined && !hasActiveCall) return;
 
       if (!isActive) {
@@ -618,6 +620,7 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
   }, []);
 
   useMeetAudioActivity({
+    enabled: isJoined && isAppActive,
     participants,
     localStream,
     isMuted,
