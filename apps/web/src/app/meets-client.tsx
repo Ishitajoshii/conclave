@@ -88,6 +88,7 @@ export type MeetsClientProps = {
   enableRoomRouting?: boolean;
   forceJoinOnly?: boolean;
   allowGhostMode?: boolean;
+  bypassMediaPermissions?: boolean;
   fontClassName?: string;
   user?: {
     id?: string;
@@ -116,6 +117,7 @@ export default function MeetsClient({
   enableRoomRouting = false,
   forceJoinOnly = false,
   allowGhostMode = true,
+  bypassMediaPermissions = false,
   fontClassName,
   user,
   isAdmin = false,
@@ -523,6 +525,7 @@ export default function MeetsClient({
     onTtsMessage: handleTtsMessage,
     prewarm,
     onSocketReady: setAppsSocket,
+    bypassMediaPermissions,
   });
 
   useMeetAudioActivity({

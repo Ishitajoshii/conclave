@@ -108,6 +108,7 @@ interface UseMeetSocketOptions {
     getCachedToken?: (roomId: string) => { token: string; sfuUrl: string } | null;
   };
   onSocketReady?: (socket: Socket | null) => void;
+  bypassMediaPermissions?: boolean;
 }
 
 export function useMeetSocket({
@@ -152,6 +153,7 @@ export function useMeetSocket({
   onTtsMessage,
   prewarm,
   onSocketReady,
+  bypassMediaPermissions = false,
 }: UseMeetSocketOptions) {
   const {
     socketRef,
@@ -1639,15 +1641,20 @@ export function useMeetSocket({
               console.log("[Meets] Join approved! Re-attempting join...");
               const joinOptions = joinOptionsRef.current;
               let stream = localStreamRef.current;
+              const shouldRequestMedia =
+                !joinOptions.isGhost && !bypassMediaPermissions;
 
-              if (!stream && !joinOptions.isGhost) {
+              if (!stream && shouldRequestMedia) {
                 stream = await requestMediaPermissions();
                 if (stream) {
                   localStreamRef.current = stream;
                   setLocalStream(stream);
                 }
               }
-              if (currentRoomIdRef.current && (stream || joinOptions.isGhost)) {
+              if (
+                currentRoomIdRef.current &&
+                (stream || joinOptions.isGhost || bypassMediaPermissions)
+              ) {
                 joinRoomInternal(
                   currentRoomIdRef.current,
                   stream,
@@ -1660,6 +1667,7 @@ export function useMeetSocket({
                     roomId: currentRoomIdRef.current,
                     hasStream: !!localStreamRef.current,
                     isGhost: joinOptionsRef.current.isGhost,
+                    bypassMediaPermissions,
                   }
                 );
               }
@@ -1768,6 +1776,7 @@ export function useMeetSocket({
       userId,
       onTtsMessage,
       onSocketReady,
+      bypassMediaPermissions,
     ]
   );
 
@@ -1800,7 +1809,10 @@ export function useMeetSocket({
 
           const joinOptions = joinOptionsRef.current;
           const stream = localStreamRef.current || localStream;
-          if (reconnectRoomId && (stream || joinOptions.isGhost)) {
+          if (
+            reconnectRoomId &&
+            (stream || joinOptions.isGhost || bypassMediaPermissions)
+          ) {
             await joinRoomInternal(reconnectRoomId, stream, joinOptions);
           }
           return;
@@ -1831,6 +1843,7 @@ export function useMeetSocket({
     setConnectionState,
     setMeetError,
     socketRef,
+    bypassMediaPermissions,
   ]);
 
   useEffect(() => {
@@ -1895,16 +1908,16 @@ export function useMeetSocket({
         isGhost: ghostEnabled,
       };
       joinOptionsRef.current = joinOptions;
+      const shouldRequestMedia =
+        !joinOptions.isGhost && !bypassMediaPermissions;
 
       try {
         const [, stream] = await Promise.all([
           connectSocket(targetRoomId),
-          joinOptions.isGhost
-            ? Promise.resolve(null)
-            : requestMediaPermissions(),
+          shouldRequestMedia ? requestMediaPermissions() : Promise.resolve(null),
         ]);
 
-        if (!joinOptions.isGhost && !stream) {
+        if (shouldRequestMedia && !stream) {
           setConnectionState("error");
           return;
         }
@@ -1934,6 +1947,7 @@ export function useMeetSocket({
       localStreamRef,
       primeAudioOutput,
       requestMediaPermissions,
+      bypassMediaPermissions,
       refs.abortControllerRef,
       refs.intentionalDisconnectRef,
       setConnectionState,
