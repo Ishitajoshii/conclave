@@ -54,7 +54,7 @@ interface UseMeetSocketOptions {
     options?: {
       user?: { id?: string; email?: string | null; name?: string | null };
       isHost?: boolean;
-    }
+    },
   ) => Promise<{
     token: string;
     sfuUrl: string;
@@ -77,6 +77,7 @@ interface UseMeetSocketOptions {
   setIsScreenSharing: (value: boolean) => void;
   setIsHandRaised: (value: boolean) => void;
   setIsRoomLocked: (value: boolean) => void;
+  setIsTtsDisabled: (value: boolean) => void;
   setActiveScreenShareId: (value: string | null) => void;
   setVideoQuality: (value: VideoQuality) => void;
   videoQualityRef: React.MutableRefObject<VideoQuality>;
@@ -85,7 +86,10 @@ interface UseMeetSocketOptions {
   >;
   requestMediaPermissions: () => Promise<MediaStream | null>;
   stopLocalTrack: (track?: MediaStreamTrack | null) => void;
-  handleLocalTrackEnded: (kind: "audio" | "video", track: MediaStreamTrack) => void;
+  handleLocalTrackEnded: (
+    kind: "audio" | "video",
+    track: MediaStreamTrack,
+  ) => void;
   playNotificationSound: (type: "join" | "leave" | "waiting") => void;
   primeAudioOutput: () => void;
   addReaction: (reaction: ReactionPayload) => void;
@@ -105,7 +109,9 @@ interface UseMeetSocketOptions {
     Device: typeof import("mediasoup-client").Device | null;
     io: typeof import("socket.io-client").io | null;
     isReady: boolean;
-    getCachedToken?: (roomId: string) => { token: string; sfuUrl: string } | null;
+    getCachedToken?: (
+      roomId: string,
+    ) => { token: string; sfuUrl: string } | null;
   };
   onSocketReady?: (socket: Socket | null) => void;
   bypassMediaPermissions?: boolean;
@@ -138,6 +144,7 @@ export function useMeetSocket({
   setIsScreenSharing,
   setIsHandRaised,
   setIsRoomLocked,
+  setIsTtsDisabled,
   setActiveScreenShareId,
   setVideoQuality,
   videoQualityRef,
@@ -195,7 +202,7 @@ export function useMeetSocket({
       consumersRef.current.forEach((consumer) => {
         try {
           consumer.close();
-        } catch { }
+        } catch {}
       });
       consumersRef.current.clear();
       producerMapRef.current.clear();
@@ -211,23 +218,23 @@ export function useMeetSocket({
 
       try {
         audioProducerRef.current?.close();
-      } catch { }
+      } catch {}
       try {
         videoProducerRef.current?.close();
-      } catch { }
+      } catch {}
       try {
         screenProducerRef.current?.close();
-      } catch { }
+      } catch {}
       audioProducerRef.current = null;
       videoProducerRef.current = null;
       screenProducerRef.current = null;
 
       try {
         producerTransportRef.current?.close();
-      } catch { }
+      } catch {}
       try {
         consumerTransportRef.current?.close();
-      } catch { }
+      } catch {}
       producerTransportRef.current = null;
       consumerTransportRef.current = null;
       if (producerTransportDisconnectTimeoutRef.current) {
@@ -243,6 +250,7 @@ export function useMeetSocket({
       setIsScreenSharing(false);
       setActiveScreenShareId(null);
       setIsHandRaised(false);
+      setIsTtsDisabled(false);
       if (resetRoomId) {
         currentRoomIdRef.current = null;
       }
@@ -264,12 +272,13 @@ export function useMeetSocket({
       setIsScreenSharing,
       setPendingUsers,
       setHostUserId,
+      setIsTtsDisabled,
       clearReactions,
       videoProducerRef,
       producerTransportDisconnectTimeoutRef,
       consumerTransportDisconnectTimeoutRef,
       producerSyncIntervalRef,
-    ]
+    ],
   );
 
   const cleanup = useCallback(() => {
@@ -318,11 +327,14 @@ export function useMeetSocket({
       }
       const timeoutId = window.setTimeout(() => {
         leaveTimeoutsRef.current.delete(leftUserId);
-        dispatchParticipants({ type: "REMOVE_PARTICIPANT", userId: leftUserId });
+        dispatchParticipants({
+          type: "REMOVE_PARTICIPANT",
+          userId: leftUserId,
+        });
       }, 200);
       leaveTimeoutsRef.current.set(leftUserId, timeoutId);
     },
-    [dispatchParticipants, leaveTimeoutsRef]
+    [dispatchParticipants, leaveTimeoutsRef],
   );
 
   const isRoomEvent = useCallback(
@@ -331,7 +343,7 @@ export function useMeetSocket({
       if (!currentRoomIdRef.current) return true;
       return eventRoomId === currentRoomIdRef.current;
     },
-    [currentRoomIdRef]
+    [currentRoomIdRef],
   );
 
   const handleProducerClosed = useCallback(
@@ -344,7 +356,7 @@ export function useMeetSocket({
             consumer.track.stop();
           }
           consumer.close();
-        } catch { }
+        } catch {}
         consumersRef.current.delete(producerId);
       }
 
@@ -386,7 +398,7 @@ export function useMeetSocket({
       pendingProducersRef,
       producerMapRef,
       setActiveScreenShareId,
-    ]
+    ],
   );
 
   const attemptIceRestart = useCallback(
@@ -423,7 +435,9 @@ export function useMeetSocket({
         );
 
         await transport.restartIce({ iceParameters: response.iceParameters });
-        console.log(`[Meets] ${transportKind} transport ICE restart succeeded.`);
+        console.log(
+          `[Meets] ${transportKind} transport ICE restart succeeded.`,
+        );
         return true;
       } catch (err) {
         console.error(
@@ -435,7 +449,12 @@ export function useMeetSocket({
         inFlight[transportKind] = false;
       }
     },
-    [socketRef, producerTransportRef, consumerTransportRef, iceRestartInFlightRef],
+    [
+      socketRef,
+      producerTransportRef,
+      consumerTransportRef,
+      iceRestartInFlightRef,
+    ],
   );
 
   const createProducerTransport = useCallback(
@@ -461,7 +480,7 @@ export function useMeetSocket({
               (
                 { dtlsParameters }: { dtlsParameters: DtlsParameters },
                 callback: () => void,
-                errback: (error: Error) => void
+                errback: (error: Error) => void,
               ) => {
                 socket.emit(
                   "connectProducerTransport",
@@ -469,9 +488,9 @@ export function useMeetSocket({
                   (res: { success: boolean } | { error: string }) => {
                     if ("error" in res) errback(new Error(res.error));
                     else callback();
-                  }
+                  },
                 );
-              }
+              },
             );
 
             transport.on(
@@ -487,7 +506,7 @@ export function useMeetSocket({
                   appData: unknown;
                 },
                 callback: (data: { id: string }) => void,
-                errback: (error: Error) => void
+                errback: (error: Error) => void,
               ) => {
                 socket.emit(
                   "produce",
@@ -495,9 +514,9 @@ export function useMeetSocket({
                   (res: { producerId: string } | { error: string }) => {
                     if ("error" in res) errback(new Error(res.error));
                     else callback({ id: res.producerId });
-                  }
+                  },
                 );
-              }
+              },
             );
 
             transport.on("connectionstatechange", (state: string) => {
@@ -541,7 +560,9 @@ export function useMeetSocket({
               }
 
               if (producerTransportDisconnectTimeoutRef.current) {
-                window.clearTimeout(producerTransportDisconnectTimeoutRef.current);
+                window.clearTimeout(
+                  producerTransportDisconnectTimeoutRef.current,
+                );
                 producerTransportDisconnectTimeoutRef.current = null;
               }
 
@@ -571,7 +592,7 @@ export function useMeetSocket({
 
             producerTransportRef.current = transport;
             resolve();
-          }
+          },
         );
       });
     },
@@ -582,7 +603,7 @@ export function useMeetSocket({
       intentionalDisconnectRef,
       producerTransportDisconnectTimeoutRef,
       attemptIceRestart,
-    ]
+    ],
   );
 
   const createConsumerTransport = useCallback(
@@ -608,7 +629,7 @@ export function useMeetSocket({
               (
                 { dtlsParameters }: { dtlsParameters: DtlsParameters },
                 callback: () => void,
-                errback: (error: Error) => void
+                errback: (error: Error) => void,
               ) => {
                 socket.emit(
                   "connectConsumerTransport",
@@ -616,9 +637,9 @@ export function useMeetSocket({
                   (res: { success: boolean } | { error: string }) => {
                     if ("error" in res) errback(new Error(res.error));
                     else callback();
-                  }
+                  },
                 );
-              }
+              },
             );
 
             transport.on("connectionstatechange", (state: string) => {
@@ -657,7 +678,9 @@ export function useMeetSocket({
               }
 
               if (consumerTransportDisconnectTimeoutRef.current) {
-                window.clearTimeout(consumerTransportDisconnectTimeoutRef.current);
+                window.clearTimeout(
+                  consumerTransportDisconnectTimeoutRef.current,
+                );
                 consumerTransportDisconnectTimeoutRef.current = null;
               }
 
@@ -674,7 +697,7 @@ export function useMeetSocket({
 
             consumerTransportRef.current = transport;
             resolve();
-          }
+          },
         );
       });
     },
@@ -684,7 +707,7 @@ export function useMeetSocket({
       intentionalDisconnectRef,
       consumerTransportDisconnectTimeoutRef,
       attemptIceRestart,
-    ]
+    ],
   );
 
   const produce = useCallback(
@@ -734,7 +757,7 @@ export function useMeetSocket({
           } catch (simulcastError) {
             console.warn(
               "[Meets] Simulcast video produce failed, retrying single-layer:",
-              simulcastError
+              simulcastError,
             );
             videoProducer = await transport.produce({
               track: videoTrack,
@@ -764,7 +787,7 @@ export function useMeetSocket({
       isMuted,
       isCameraOff,
       videoQualityRef,
-    ]
+    ],
   );
 
   const consumeProducer = useCallback(
@@ -879,14 +902,14 @@ export function useMeetSocket({
               socket.emit(
                 "resumeConsumer",
                 { consumerId: consumer.id },
-                () => { }
+                () => {},
               );
               resolve();
             } catch (err) {
               console.error("[Meets] Failed to create consumer:", err);
               resolve();
             }
-          }
+          },
         );
       });
     },
@@ -900,7 +923,7 @@ export function useMeetSocket({
       dispatchParticipants,
       handleProducerClosed,
       setActiveScreenShareId,
-    ]
+    ],
   );
 
   const syncProducers = useCallback(async () => {
@@ -968,7 +991,7 @@ export function useMeetSocket({
             socket.emit(
               "resumeConsumer",
               { consumerId: consumer.id },
-              () => {}
+              () => {},
             );
           }
           continue;
@@ -1004,14 +1027,16 @@ export function useMeetSocket({
     if (!pendingProducersRef.current.size) return;
     const pending = Array.from(pendingProducersRef.current.values());
     pendingProducersRef.current.clear();
-    await Promise.all(pending.map((producerInfo) => consumeProducer(producerInfo)));
+    await Promise.all(
+      pending.map((producerInfo) => consumeProducer(producerInfo)),
+    );
   }, [pendingProducersRef, consumeProducer]);
 
   const joinRoomInternal = useCallback(
     async (
       targetRoomId: string,
       stream: MediaStream | null,
-      joinOptions: { displayName?: string; isGhost: boolean }
+      joinOptions: { displayName?: string; isGhost: boolean },
     ): Promise<"joined" | "waiting"> => {
       const socket = socketRef.current;
       if (!socket) throw new Error("Socket not connected");
@@ -1038,6 +1063,7 @@ export function useMeetSocket({
               setConnectionState("waiting");
               setHostUserId(response.hostUserId ?? null);
               currentRoomIdRef.current = targetRoomId;
+              setIsTtsDisabled(response.isTtsDisabled ?? false);
               resolve("waiting");
               return;
             }
@@ -1046,9 +1072,11 @@ export function useMeetSocket({
               const joinedTime = performance.now();
               console.log(
                 "[Meets] Joined room, existing producers:",
-                response.existingProducers
+                response.existingProducers,
               );
               currentRoomIdRef.current = targetRoomId;
+              setIsRoomLocked(response.isLocked ?? false);
+              setIsTtsDisabled(response.isTtsDisabled ?? false);
 
               // Use pre-warmed Device if available, otherwise dynamic import
               const DeviceClass = prewarm?.Device
@@ -1061,7 +1089,7 @@ export function useMeetSocket({
               });
               deviceRef.current = device;
               console.log(
-                `[Meets] Device loaded in ${(performance.now() - joinedTime).toFixed(0)}ms`
+                `[Meets] Device loaded in ${(performance.now() - joinedTime).toFixed(0)}ms`,
               );
 
               const shouldProduce = !!stream && !joinOptions.isGhost;
@@ -1074,12 +1102,10 @@ export function useMeetSocket({
               ]);
 
               const producePromise =
-                shouldProduce && stream
-                  ? produce(stream)
-                  : Promise.resolve();
+                shouldProduce && stream ? produce(stream) : Promise.resolve();
 
               const consumePromises = response.existingProducers.map(
-                (producer) => consumeProducer(producer)
+                (producer) => consumeProducer(producer),
               );
 
               await Promise.all([producePromise, ...consumePromises]);
@@ -1094,7 +1120,7 @@ export function useMeetSocket({
             } catch (err) {
               reject(err);
             }
-          }
+          },
         );
       });
     },
@@ -1114,7 +1140,9 @@ export function useMeetSocket({
       playNotificationSound,
       startProducerSync,
       syncProducers,
-    ]
+      setIsRoomLocked,
+      setIsTtsDisabled,
+    ],
   );
 
   const connectSocket = useCallback(
@@ -1129,7 +1157,8 @@ export function useMeetSocket({
 
             setConnectionState("connecting");
 
-            const roomIdForJoin = targetRoomId || currentRoomIdRef.current || "";
+            const roomIdForJoin =
+              targetRoomId || currentRoomIdRef.current || "";
             if (!roomIdForJoin) {
               throw new Error("Missing room ID");
             }
@@ -1144,9 +1173,9 @@ export function useMeetSocket({
             const tokenPromise = cachedToken
               ? Promise.resolve(cachedToken)
               : getJoinInfo(roomIdForJoin, sessionIdRef.current, {
-                user,
-                isHost: isAdmin,
-              });
+                  user,
+                  isHost: isAdmin,
+                });
 
             const [{ token, sfuUrl }, { io }] = await Promise.all([
               tokenPromise,
@@ -1168,7 +1197,7 @@ export function useMeetSocket({
             socket.on("connect", () => {
               clearTimeout(connectionTimeout);
               console.log(
-                `[Meets] Connected to SFU in ${(performance.now() - joinStartTime).toFixed(0)}ms`
+                `[Meets] Connected to SFU in ${(performance.now() - joinStartTime).toFixed(0)}ms`,
               );
               setConnectionState("connected");
               setMeetError(null);
@@ -1223,7 +1252,7 @@ export function useMeetSocket({
                 setIsAdmin(true);
                 setHostUserId(hostUserId ?? userId);
                 setWaitingMessage(null);
-              }
+              },
             );
 
             socket.on(
@@ -1237,7 +1266,7 @@ export function useMeetSocket({
               }) => {
                 if (!isRoomEvent(eventRoomId)) return;
                 setHostUserId(hostUserId ?? null);
-              }
+              },
             );
 
             socket.on("newProducer", async (data: ProducerInfo) => {
@@ -1280,7 +1309,7 @@ export function useMeetSocket({
                   screenProducerRef.current = null;
                   setActiveScreenShareId(null);
                 }
-              }
+              },
             );
 
             socket.on(
@@ -1316,7 +1345,7 @@ export function useMeetSocket({
                   userId: joinedUserId,
                   isGhost,
                 });
-              }
+              },
             );
 
             socket.on(
@@ -1334,7 +1363,7 @@ export function useMeetSocket({
                 });
 
                 const producersToClose = Array.from(
-                  producerMapRef.current.entries()
+                  producerMapRef.current.entries(),
                 )
                   .filter(([, info]) => info.userId === leftUserId)
                   .map(([producerId]) => producerId);
@@ -1355,7 +1384,7 @@ export function useMeetSocket({
                 });
 
                 scheduleParticipantRemoval(leftUserId);
-              }
+              },
             );
 
             socket.on(
@@ -1369,26 +1398,27 @@ export function useMeetSocket({
               }) => {
                 if (!isRoomEvent(eventRoomId)) return;
                 const snapshot = new Map<string, string>();
-                (users || []).forEach(({ userId: snapshotUserId, displayName }) => {
-                  if (displayName) {
-                    snapshot.set(snapshotUserId, displayName);
-                  }
-                  if (snapshotUserId !== userId) {
-                    const leaveTimeout = leaveTimeoutsRef.current.get(
-                      snapshotUserId
-                    );
-                    if (leaveTimeout) {
-                      window.clearTimeout(leaveTimeout);
-                      leaveTimeoutsRef.current.delete(snapshotUserId);
+                (users || []).forEach(
+                  ({ userId: snapshotUserId, displayName }) => {
+                    if (displayName) {
+                      snapshot.set(snapshotUserId, displayName);
                     }
-                    dispatchParticipants({
-                      type: "ADD_PARTICIPANT",
-                      userId: snapshotUserId,
-                    });
-                  }
-                });
+                    if (snapshotUserId !== userId) {
+                      const leaveTimeout =
+                        leaveTimeoutsRef.current.get(snapshotUserId);
+                      if (leaveTimeout) {
+                        window.clearTimeout(leaveTimeout);
+                        leaveTimeoutsRef.current.delete(snapshotUserId);
+                      }
+                      dispatchParticipants({
+                        type: "ADD_PARTICIPANT",
+                        userId: snapshotUserId,
+                      });
+                    }
+                  },
+                );
                 setDisplayNames(snapshot);
-              }
+              },
             );
 
             socket.on(
@@ -1406,7 +1436,7 @@ export function useMeetSocket({
                     raised,
                   });
                 });
-              }
+              },
             );
 
             socket.on(
@@ -1426,7 +1456,7 @@ export function useMeetSocket({
                   next.set(updatedUserId, displayName);
                   return next;
                 });
-              }
+              },
             );
 
             socket.on(
@@ -1446,7 +1476,7 @@ export function useMeetSocket({
                   userId: mutedUserId,
                   muted,
                 });
-              }
+              },
             );
 
             socket.on(
@@ -1466,7 +1496,7 @@ export function useMeetSocket({
                   userId: camUserId,
                   cameraOff,
                 });
-              }
+              },
             );
 
             socket.on(
@@ -1476,18 +1506,19 @@ export function useMeetSocket({
                 videoQualityRef.current = quality;
                 setVideoQuality(quality);
                 await updateVideoQualityRef.current(quality);
-              }
+              },
             );
 
             socket.on("chatMessage", (message: ChatMessage) => {
               console.log("[Meets] Chat message received:", message);
-              const { message: normalized, ttsText } = normalizeChatMessage(message);
+              const { message: normalized, ttsText } =
+                normalizeChatMessage(message);
               chat.setChatMessages((prev) => [...prev, normalized]);
               if (normalized.userId !== userId) {
                 chat.setChatOverlayMessages((prev) => [...prev, normalized]);
                 setTimeout(() => {
                   chat.setChatOverlayMessages((prev) =>
-                    prev.filter((m) => m.id !== normalized.id)
+                    prev.filter((m) => m.id !== normalized.id),
                   );
                 }, 5000);
               }
@@ -1537,7 +1568,7 @@ export function useMeetSocket({
                   userId: raisedUserId,
                   raised,
                 });
-              }
+              },
             );
 
             socket.on("kicked", () => {
@@ -1553,10 +1584,10 @@ export function useMeetSocket({
               "redirect",
               async ({ newRoomId }: { newRoomId: string }) => {
                 console.log(
-                  `[Meets] Redirect received. Initiating full switch to ${newRoomId}`
+                  `[Meets] Redirect received. Initiating full switch to ${newRoomId}`,
                 );
                 handleRedirectRef.current(newRoomId);
-              }
+              },
             );
 
             socket.on(
@@ -1578,7 +1609,7 @@ export function useMeetSocket({
                   newMap.set(userId, displayName);
                   return newMap;
                 });
-              }
+              },
             );
 
             socket.on(
@@ -1595,46 +1626,64 @@ export function useMeetSocket({
                   (users || []).map(({ userId, displayName }) => [
                     userId,
                     displayName || userId,
-                  ])
+                  ]),
                 );
                 setPendingUsers(snapshot);
-              }
+              },
             );
 
             socket.on(
               "userAdmitted",
-              ({ userId, roomId: eventRoomId }: { userId: string; roomId?: string }) => {
+              ({
+                userId,
+                roomId: eventRoomId,
+              }: {
+                userId: string;
+                roomId?: string;
+              }) => {
                 if (!isRoomEvent(eventRoomId)) return;
                 setPendingUsers((prev) => {
                   const newMap = new Map(prev);
                   newMap.delete(userId);
                   return newMap;
                 });
-              }
+              },
             );
 
             socket.on(
               "userRejected",
-              ({ userId, roomId: eventRoomId }: { userId: string; roomId?: string }) => {
+              ({
+                userId,
+                roomId: eventRoomId,
+              }: {
+                userId: string;
+                roomId?: string;
+              }) => {
                 if (!isRoomEvent(eventRoomId)) return;
                 setPendingUsers((prev) => {
                   const newMap = new Map(prev);
                   newMap.delete(userId);
                   return newMap;
                 });
-              }
+              },
             );
 
             socket.on(
               "pendingUserLeft",
-              ({ userId, roomId: eventRoomId }: { userId: string; roomId?: string }) => {
+              ({
+                userId,
+                roomId: eventRoomId,
+              }: {
+                userId: string;
+                roomId?: string;
+              }) => {
                 if (!isRoomEvent(eventRoomId)) return;
                 setPendingUsers((prev) => {
                   const newMap = new Map(prev);
                   newMap.delete(userId);
                   return newMap;
                 });
-              }
+              },
             );
 
             socket.on("joinApproved", async () => {
@@ -1658,7 +1707,7 @@ export function useMeetSocket({
                 joinRoomInternal(
                   currentRoomIdRef.current,
                   stream,
-                  joinOptions
+                  joinOptions,
                 ).catch(console.error);
               } else {
                 console.error(
@@ -1668,7 +1717,7 @@ export function useMeetSocket({
                     hasStream: !!localStreamRef.current,
                     isGhost: joinOptionsRef.current.isGhost,
                     bypassMediaPermissions,
-                  }
+                  },
                 );
               }
             });
@@ -1696,7 +1745,7 @@ export function useMeetSocket({
               }) => {
                 if (!isRoomEvent(eventRoomId)) return;
                 setWaitingMessage(message);
-              }
+              },
             );
 
             socket.on(
@@ -1711,7 +1760,22 @@ export function useMeetSocket({
                 if (!isRoomEvent(eventRoomId)) return;
                 console.log("[Meets] Room lock changed:", locked);
                 setIsRoomLocked(locked);
-              }
+              },
+            );
+
+            socket.on(
+              "ttsDisabledChanged",
+              ({
+                disabled,
+                roomId: eventRoomId,
+              }: {
+                disabled: boolean;
+                roomId?: string;
+              }) => {
+                if (!isRoomEvent(eventRoomId)) return;
+                console.log("[Meets] Room TTS disabled changed:", disabled);
+                setIsTtsDisabled(disabled);
+              },
             );
 
             socketRef.current = socket;
@@ -1762,6 +1826,8 @@ export function useMeetSocket({
       setIsMuted,
       setIsScreenSharing,
       setIsHandRaised,
+      setIsRoomLocked,
+      setIsTtsDisabled,
       setHostUserId,
       setLocalStream,
       setMeetError,
@@ -1777,7 +1843,7 @@ export function useMeetSocket({
       onTtsMessage,
       onSocketReady,
       bypassMediaPermissions,
-    ]
+    ],
   );
 
   const handleReconnect = useCallback(async () => {
@@ -1792,7 +1858,7 @@ export function useMeetSocket({
           RECONNECT_DELAY_MS * 2 ** (reconnectAttemptsRef.current - 1);
 
         console.log(
-          `[Meets] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`
+          `[Meets] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`,
         );
         await new Promise((r) => setTimeout(r, delay));
 
@@ -1886,7 +1952,7 @@ export function useMeetSocket({
       setRoomId(newRoomId);
       shouldAutoJoinRef.current = true;
     },
-    [cleanup, setRoomId, shouldAutoJoinRef]
+    [cleanup, setRoomId, shouldAutoJoinRef],
   );
 
   useEffect(() => {
@@ -1914,7 +1980,9 @@ export function useMeetSocket({
       try {
         const [, stream] = await Promise.all([
           connectSocket(targetRoomId),
-          shouldRequestMedia ? requestMediaPermissions() : Promise.resolve(null),
+          shouldRequestMedia
+            ? requestMediaPermissions()
+            : Promise.resolve(null),
         ]);
 
         if (shouldRequestMedia && !stream) {
@@ -1955,7 +2023,7 @@ export function useMeetSocket({
       setMeetError,
       setRoomId,
       stopLocalTrack,
-    ]
+    ],
   );
 
   const joinRoom = useCallback(async () => {
@@ -1966,7 +2034,7 @@ export function useMeetSocket({
     async (targetRoomId: string) => {
       await startJoin(targetRoomId);
     },
-    [startJoin]
+    [startJoin],
   );
 
   useEffect(() => {
@@ -1986,18 +2054,25 @@ export function useMeetSocket({
         socket.emit(
           "lockRoom",
           { locked },
-          (response: { success: boolean; locked?: boolean } | { error: string }) => {
+          (
+            response:
+              | { success: boolean; locked?: boolean }
+              | { error: string },
+          ) => {
             if ("error" in response) {
-              console.error("[Meets] Failed to toggle room lock:", response.error);
+              console.error(
+                "[Meets] Failed to toggle room lock:",
+                response.error,
+              );
               resolve(false);
             } else {
               resolve(response.success);
             }
-          }
+          },
         );
       });
     },
-    [socketRef]
+    [socketRef],
   );
 
   return {
