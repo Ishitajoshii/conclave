@@ -36,7 +36,11 @@ const getAwarenessStateUserId = (state: unknown): string | null => {
     return null;
   }
   const record = state as { user?: unknown };
-  if (!record.user || typeof record.user !== "object" || Array.isArray(record.user)) {
+  if (
+    !record.user ||
+    typeof record.user !== "object" ||
+    Array.isArray(record.user)
+  ) {
     return null;
   }
   const user = record.user as { id?: unknown };
@@ -67,6 +71,7 @@ export class Room {
   public cleanupTimer: NodeJS.Timeout | null = null;
   public hostUserKey: string | null = null;
   private _isLocked: boolean = false;
+  private _isTtsDisabled: boolean = false;
   public appsState: { activeAppId: string | null; locked: boolean } = {
     activeAppId: null,
     locked: false,
@@ -316,6 +321,14 @@ export class Room {
     }
   }
 
+  get isTtsDisabled(): boolean {
+    return this._isTtsDisabled;
+  }
+
+  setTtsDisabled(disabled: boolean): void {
+    this._isTtsDisabled = disabled;
+  }
+
   getAdmins(): Admin[] {
     const admins: Admin[] = [];
     for (const client of this.clients.values()) {
@@ -374,9 +387,7 @@ export class Room {
     return null;
   }
 
-  private getOrCreateAwarenessUserMap(
-    appId: string,
-  ): Map<string, Set<number>> {
+  private getOrCreateAwarenessUserMap(appId: string): Map<string, Set<number>> {
     const existing = this.appAwarenessClientIdsByUser.get(appId);
     if (existing) return existing;
     const map = new Map<string, Set<number>>();

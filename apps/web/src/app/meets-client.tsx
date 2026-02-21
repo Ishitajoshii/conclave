@@ -537,6 +537,7 @@ export default function MeetsClient({
     setIsScreenSharing,
     setIsHandRaised,
     setIsRoomLocked,
+    isTtsDisabled,
     setIsTtsDisabled,
     setActiveScreenShareId,
     setVideoQuality,

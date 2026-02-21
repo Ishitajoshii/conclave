@@ -54,6 +54,7 @@ export interface JoinRoomResponse {
   existingProducers: ProducerInfo[];
   status?: "waiting" | "joined";
   hostUserId?: string | null;
+  isTtsDisabled?: boolean;
 }
 
 export interface CreateTransportResponse {
@@ -154,7 +155,7 @@ export interface SendChatData {
   content: string;
 }
 
-export interface ChatMessageNotification extends ChatMessage { }
+export interface ChatMessageNotification extends ChatMessage {}
 
 // ============================================
 // Reactions

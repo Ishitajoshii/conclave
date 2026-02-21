@@ -82,7 +82,7 @@ export function useMeetChat({
           if (response.message) {
             const { message, ttsText } = normalizeChatMessage(response.message);
             setChatMessages((prev) => [...prev, message]);
-            if (ttsText) {
+            if (ttsText && !isTtsDisabled) {
               onTtsMessage?.({
                 userId: message.userId,
                 displayName: message.displayName,

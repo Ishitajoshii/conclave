@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { Socket } from "socket.io-client";
 import type { Device } from "mediasoup-client";
 import {
@@ -77,6 +77,7 @@ interface UseMeetSocketOptions {
   setIsScreenSharing: (value: boolean) => void;
   setIsHandRaised: (value: boolean) => void;
   setIsRoomLocked: (value: boolean) => void;
+  isTtsDisabled: boolean;
   setIsTtsDisabled: (value: boolean) => void;
   setActiveScreenShareId: (value: string | null) => void;
   setVideoQuality: (value: VideoQuality) => void;
@@ -144,6 +145,7 @@ export function useMeetSocket({
   setIsScreenSharing,
   setIsHandRaised,
   setIsRoomLocked,
+  isTtsDisabled,
   setIsTtsDisabled,
   setActiveScreenShareId,
   setVideoQuality,
@@ -189,6 +191,11 @@ export function useMeetSocket({
     iceRestartInFlightRef,
     producerSyncIntervalRef,
   } = refs;
+
+  const isTtsDisabledRef = useRef(isTtsDisabled);
+  useEffect(() => {
+    isTtsDisabledRef.current = isTtsDisabled;
+  }, [isTtsDisabled]);
 
   const cleanupRoomResources = useCallback(
     (options?: { resetRoomId?: boolean }) => {
@@ -1522,7 +1529,7 @@ export function useMeetSocket({
                   );
                 }, 5000);
               }
-              if (ttsText) {
+              if (ttsText && !isTtsDisabledRef.current) {
                 onTtsMessage?.({
                   userId: normalized.userId,
                   displayName: normalized.displayName,

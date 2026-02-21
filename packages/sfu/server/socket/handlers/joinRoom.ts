@@ -49,7 +49,9 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
         }
         const identity = buildUserIdentity(user, sessionId, socket.id);
         if (!identity) {
-          respond(callback, { error: "Authentication error: Invalid token payload" });
+          respond(callback, {
+            error: "Authentication error: Invalid token payload",
+          });
           return;
         }
         if (user?.sessionId && sessionId && user.sessionId !== sessionId) {
@@ -140,7 +142,8 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
           context.pendingUserKey = userKey;
 
           socket.emit("waitingRoomStatus", {
-            message: "This meeting is locked. Waiting for the host to let you in.",
+            message:
+              "This meeting is locked. Waiting for the host to let you in.",
             roomId,
           });
 
@@ -159,6 +162,7 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
             existingProducers: [],
             status: "waiting",
             hostUserId: room.getHostUserId(),
+            isTtsDisabled: room.isTtsDisabled,
           });
           return;
         }
@@ -196,6 +200,7 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
             existingProducers: [],
             status: "waiting",
             hostUserId: room.getHostUserId(),
+            isTtsDisabled: room.isTtsDisabled,
           });
           return;
         }
@@ -212,9 +217,8 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
             `User ${userId} switching from ${previousRoom.id} to ${roomId}`,
           );
 
-          const awarenessRemovals = previousRoom.clearUserAwareness(
-            previousClientId,
-          );
+          const awarenessRemovals =
+            previousRoom.clearUserAwareness(previousClientId);
           for (const removal of awarenessRemovals) {
             socket.to(previousChannelId).emit("apps:awareness", {
               appId: removal.appId,
@@ -230,7 +234,9 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
               excludeUserId: previousClientId,
             });
           } else {
-            socket.to(previousChannelId).emit("userLeft", { userId: previousClientId });
+            socket
+              .to(previousChannelId)
+              .emit("userLeft", { userId: previousClientId });
           }
 
           socket.leave(previousChannelId);
@@ -340,7 +346,8 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
         const existingProducers = context.currentRoom.getAllProducers(userId);
 
         Logger.debug(
-          `User ${userId} joined room ${roomId} as ${isHost ? "Host" : "Client"
+          `User ${userId} joined room ${roomId} as ${
+            isHost ? "Host" : "Client"
           }`,
         );
 
@@ -353,6 +360,7 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
           existingProducers,
           status: "joined",
           hostUserId: context.currentRoom.getHostUserId(),
+          isTtsDisabled: context.currentRoom.isTtsDisabled,
         });
       } catch (error) {
         Logger.error("Error joining room:", error);
