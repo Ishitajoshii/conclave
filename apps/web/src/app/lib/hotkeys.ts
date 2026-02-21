@@ -46,7 +46,7 @@ export const HOTKEYS: Record<HotkeyAction, HotkeyDefinition> = {
   toggleLockMeeting: {
     keys: "Mod+Shift+L",
     label: "Lock Meeting",
-    description: "To lock the meeting, so no one can enter the meeting",
+    description: "Locks the meeting, preventing new participants from joining.",
   },
   toggleScreenShare: {
     keys: "Mod+Shift+S",
