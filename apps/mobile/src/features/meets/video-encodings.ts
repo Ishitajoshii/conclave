@@ -29,22 +29,16 @@ export function buildWebcamSimulcastEncodings(quality: VideoQuality) {
 
   return [
     {
-      rid: "q",
-      scaleResolutionDownBy: 4,
-      maxBitrate: floorBitrate(maxBitrate * 0.15, 90000),
-      maxFramerate: 15,
-    },
-    {
       rid: "h",
       scaleResolutionDownBy: 2,
-      maxBitrate: floorBitrate(maxBitrate * 0.45, 220000),
-      maxFramerate: 24,
+      maxBitrate: floorBitrate(maxBitrate * 0.35, 160000),
+      maxFramerate: 15,
     },
     {
       rid: "f",
       scaleResolutionDownBy: 1,
       maxBitrate,
-      maxFramerate: 30,
+      maxFramerate: 24,
     },
   ];
 }
@@ -53,6 +47,6 @@ export function buildWebcamSingleLayerEncoding(quality: VideoQuality) {
   return {
     maxBitrate:
       quality === "low" ? LOW_VIDEO_MAX_BITRATE : STANDARD_VIDEO_MAX_BITRATE,
-    maxFramerate: quality === "low" ? 24 : 30,
+    maxFramerate: quality === "low" ? 20 : 24,
   };
 }

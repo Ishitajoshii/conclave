@@ -26,12 +26,14 @@ const isPublicClient = clientId === "public";
 type MeetsClientPageProps = {
   initialRoomId?: string;
   forceJoinOnly?: boolean;
+  bypassMediaPermissions?: boolean;
   fontClassName?: string;
 };
 
 export default function MeetsClientPage({
   initialRoomId,
   forceJoinOnly = false,
+  bypassMediaPermissions = false,
   fontClassName,
 }: MeetsClientPageProps) {
   const user = undefined;
@@ -101,6 +103,7 @@ export default function MeetsClientPage({
         enableRoomRouting={isPublicClient}
         forceJoinOnly={forceJoinOnly}
         allowGhostMode={!isPublicClient}
+        bypassMediaPermissions={bypassMediaPermissions}
         getJoinInfo={getJoinInfo}
         getRooms={getRooms}
         getRoomsForRedirect={getRoomsForRedirect}

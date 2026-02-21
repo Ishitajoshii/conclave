@@ -17,24 +17,28 @@ export function useMeetState({ initialRoomId }: UseMeetStateOptions) {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [isGhostMode, setIsGhostMode] = useState(false);
-  const [activeScreenShareId, setActiveScreenShareId] = useState<
-    string | null
-  >(null);
+  const [activeScreenShareId, setActiveScreenShareId] = useState<string | null>(
+    null,
+  );
   const [participants, dispatchParticipants] = useReducer(
     participantReducer,
-    new Map()
+    new Map(),
   );
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [activeSpeakerId, setActiveSpeakerId] = useState<string | null>(null);
   const [meetError, setMeetError] = useState<MeetError | null>(null);
   const [waitingMessage, setWaitingMessage] = useState<string | null>(null);
   const [pendingUsers, setPendingUsers] = useState<Map<string, string>>(
-    new Map()
+    new Map(),
   );
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
   const [isRoomLocked, setIsRoomLocked] = useState(false);
+  const [isNoGuests, setIsNoGuests] = useState(false);
+  const [isChatLocked, setIsChatLocked] = useState(false);
+  const [isTtsDisabled, setIsTtsDisabled] = useState(false);
   const [isBrowserAudioMuted, setIsBrowserAudioMuted] = useState(false);
   const [hostUserId, setHostUserId] = useState<string | null>(null);
+  const [isNetworkOffline, setIsNetworkOffline] = useState(false);
 
   return {
     connectionState,
@@ -69,9 +73,17 @@ export function useMeetState({ initialRoomId }: UseMeetStateOptions) {
     setIsParticipantsOpen,
     isRoomLocked,
     setIsRoomLocked,
+    isNoGuests,
+    setIsNoGuests,
+    isChatLocked,
+    setIsChatLocked,
+    isTtsDisabled,
+    setIsTtsDisabled,
     isBrowserAudioMuted,
     setIsBrowserAudioMuted,
     hostUserId,
     setHostUserId,
+    isNetworkOffline,
+    setIsNetworkOffline,
   };
 }

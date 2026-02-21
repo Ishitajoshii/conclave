@@ -44,7 +44,7 @@ import { useMeetState } from "../hooks/use-meet-state";
 import { useMeetTts } from "../hooks/use-meet-tts";
 import { useDeviceLayout } from "../hooks/use-device-layout";
 import type { Participant } from "../types";
-import { createMeetError } from "../utils";
+import { createMeetError, isSystemUserId } from "../utils";
 import { getCachedUser, hydrateCachedUser, setCachedUser } from "../auth-session";
 import { CallScreen } from "./call-screen";
 import { ChatPanel } from "./chat-panel";
@@ -97,6 +97,7 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
       }),
     []
   );
+  const [isAppActive, setIsAppActive] = useState(AppState.currentState === "active");
   const isAppActiveRef = useRef(AppState.currentState === "active");
   const wasCameraOnBeforeBackgroundRef = useRef(false);
   const wasMutedBeforeBackgroundRef = useRef(true);
@@ -134,6 +135,8 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
     pendingUsers,
     isRoomLocked,
     setIsRoomLocked,
+    isChatLocked,
+    setIsChatLocked,
   } = useMeetState({ initialRoomId });
 
   useEffect(() => {
@@ -323,6 +326,40 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
     audioContextRef: refs.audioContextRef,
   });
 
+  const participantCount = useMemo(() => {
+    let count = 1; // include local user
+    participants.forEach((participant) => {
+      if (!isSystemUserId(participant.userId)) {
+        count += 1;
+      }
+    });
+    return count;
+  }, [participants]);
+
+  const participantCountRef = useRef(participantCount);
+  useEffect(() => {
+    participantCountRef.current = participantCount;
+  }, [participantCount]);
+
+  const shouldPlayJoinLeaveSound = useCallback(
+    (type: "join" | "leave") => {
+      const currentCount = participantCountRef.current ?? 1;
+      const projectedCount = type === "join" ? currentCount + 1 : currentCount;
+      return projectedCount < 30;
+    },
+    []
+  );
+
+  const playNotificationSoundForEvents = useCallback(
+    (type: "join" | "leave" | "waiting") => {
+      if ((type === "join" || type === "leave") && !shouldPlayJoinLeaveSound(type)) {
+        return;
+      }
+      playNotificationSound(type);
+    },
+    [playNotificationSound, shouldPlayJoinLeaveSound]
+  );
+
   const isJoined = connectionState === "joined";
   const effectiveActiveSpeakerId = ttsSpeakerId ?? activeSpeakerId;
   const isLoading =
@@ -391,6 +428,7 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
     const subscription = AppState.addEventListener("change", (state) => {
       const isActive = state === "active";
       isAppActiveRef.current = isActive;
+      setIsAppActive(isActive);
       if (!isJoined && !hasActiveCall) return;
 
       if (!isActive) {
@@ -471,6 +509,8 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
   } = useMeetChat({
     socketRef: refs.socketRef,
     ghostEnabled: isGhostMode,
+    isChatLocked,
+    isAdmin,
     isMuted,
     isCameraOff,
     onToggleMute: toggleMute,
@@ -533,6 +573,7 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
     setIsScreenSharing,
     setIsHandRaised,
     setIsRoomLocked,
+    setIsChatLocked,
     setActiveScreenShareId,
     setVideoQuality,
     videoQualityRef: refs.videoQualityRef,
@@ -540,7 +581,7 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
     requestMediaPermissions,
     stopLocalTrack,
     handleLocalTrackEnded,
-    playNotificationSound,
+    playNotificationSound: playNotificationSoundForEvents,
     primeAudioOutput,
     addReaction,
     clearReactions,
@@ -618,6 +659,7 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
   }, []);
 
   useMeetAudioActivity({
+    enabled: isJoined && isAppActive,
     participants,
     localStream,
     isMuted,
@@ -654,8 +696,8 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
   const socketCleanupRef = useRef(socket.cleanup);
   socketCleanupRef.current = socket.cleanup;
 
-  const playNotificationSoundRef = useRef(playNotificationSound);
-  playNotificationSoundRef.current = playNotificationSound;
+  const playNotificationSoundRef = useRef(playNotificationSoundForEvents);
+  playNotificationSoundRef.current = playNotificationSoundForEvents;
 
   const stopScreenShareRef = useRef(stopScreenShare);
   stopScreenShareRef.current = stopScreenShare;
@@ -729,7 +771,7 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
       );
       callIdRef.current = activeCallId;
       startInCall();
-      setAudioRoute("speaker");
+      setAudioRoute("auto");
       cleanupHandlers = registerCallKeepHandlers(() => {
         handleLeave();
       });
@@ -1157,6 +1199,9 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
           onToggleRoomLock={(locked) => {
             socket.toggleRoomLock?.(locked);
           }}
+          onToggleChatLock={(locked) => {
+            socket.toggleChatLock?.(locked);
+          }}
           onSendReaction={(emoji) => {
             sendReaction({ kind: "emoji", id: emoji, value: emoji, label: emoji });
           }}
@@ -1170,6 +1215,7 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
           onLeave={handleLeave}
           isAdmin={isAdmin}
           isRoomLocked={isRoomLocked}
+          isChatLocked={isChatLocked}
           pendingUsersCount={pendingUsers.size}
         />
       )}
@@ -1194,6 +1240,8 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
           }}
           currentUserId={userId}
           isGhostMode={isGhostMode}
+          isChatLocked={isChatLocked}
+          isAdmin={isAdmin}
           resolveDisplayName={resolveDisplayName}
         />
       ) : null}
@@ -1251,6 +1299,7 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
           visible={isSettingsSheetOpen}
           isHandRaised={isHandRaised}
           isRoomLocked={isRoomLocked}
+          isChatLocked={isChatLocked}
           isAdmin={isAdmin}
           onOpenDisplayName={() => {
             setIsSettingsSheetOpen(false);
@@ -1263,6 +1312,10 @@ export function MeetScreen({ initialRoomId }: { initialRoomId?: string } = {}) {
           onToggleRoomLock={(locked) => {
             setIsSettingsSheetOpen(false);
             socket.toggleRoomLock?.(locked);
+          }}
+          onToggleChatLock={(locked) => {
+            setIsSettingsSheetOpen(false);
+            socket.toggleChatLock?.(locked);
           }}
           onClose={() => setIsSettingsSheetOpen(false)}
         />

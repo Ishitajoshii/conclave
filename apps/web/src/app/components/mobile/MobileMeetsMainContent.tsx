@@ -87,10 +87,14 @@ interface MobileMeetsMainContentProps {
   setPendingUsers: Dispatch<SetStateAction<Map<string, string>>>;
   resolveDisplayName: (userId: string) => string;
   reactions: ReactionEvent[];
-  onUserChange: (user: { id: string; email: string; name: string } | null) => void;
+  onUserChange: (
+    user: { id: string; email: string; name: string } | null,
+  ) => void;
   onIsAdminChange: (isAdmin: boolean) => void;
   isRoomLocked: boolean;
   onToggleLock: () => void;
+  isChatLocked: boolean;
+  onToggleChatLock: () => void;
   browserState?: BrowserState;
   isBrowserLaunching?: boolean;
   browserLaunchError?: string | null;
@@ -108,6 +112,8 @@ interface MobileMeetsMainContentProps {
   onRetryMedia?: () => void;
   onTestSpeaker?: () => void;
   hostUserId: string | null;
+  isNetworkOffline: boolean;
+  isTtsDisabled: boolean;
 }
 
 function MobileMeetsMainContent({
@@ -168,6 +174,8 @@ function MobileMeetsMainContent({
   onIsAdminChange,
   isRoomLocked,
   onToggleLock,
+  isChatLocked,
+  onToggleChatLock,
   browserState,
   isBrowserLaunching,
   browserLaunchError,
@@ -185,21 +193,32 @@ function MobileMeetsMainContent({
   onRetryMedia,
   onTestSpeaker,
   hostUserId,
+  isNetworkOffline,
+  isTtsDisabled,
 }: MobileMeetsMainContentProps) {
-  const { state: appsState, openApp, closeApp, setLocked, refreshState } = useApps();
+  const {
+    state: appsState,
+    openApp,
+    closeApp,
+    setLocked,
+    refreshState,
+  } = useApps();
   const isDevPlaygroundEnabled = process.env.NODE_ENV === "development";
   const isWhiteboardActive = appsState.activeAppId === "whiteboard";
   const isDevPlaygroundActive = appsState.activeAppId === "dev-playground";
-  const handleOpenWhiteboard = useCallback(() => openApp("whiteboard"), [openApp]);
+  const handleOpenWhiteboard = useCallback(
+    () => openApp("whiteboard"),
+    [openApp],
+  );
   const handleCloseWhiteboard = useCallback(() => closeApp(), [closeApp]);
   const handleOpenDevPlayground = useCallback(
     () => openApp("dev-playground"),
-    [openApp]
+    [openApp],
   );
   const handleCloseDevPlayground = useCallback(() => closeApp(), [closeApp]);
   const handleToggleAppsLock = useCallback(
     () => setLocked(!appsState.locked),
-    [appsState.locked, setLocked]
+    [appsState.locked, setLocked],
   );
   useEffect(() => {
     if (connectionState === "joined") {
@@ -215,12 +234,12 @@ function MobileMeetsMainContent({
         }
         return next;
       }),
-    [isChatOpen, setIsParticipantsOpen, toggleChat]
+    [isChatOpen, setIsParticipantsOpen, toggleChat],
   );
 
   const handleCloseParticipants = useCallback(
     () => setIsParticipantsOpen(false),
-    [setIsParticipantsOpen]
+    [setIsParticipantsOpen],
   );
   const handleToggleChat = useCallback(() => {
     if (!isChatOpen && isParticipantsOpen) {
@@ -230,22 +249,23 @@ function MobileMeetsMainContent({
   }, [isChatOpen, isParticipantsOpen, setIsParticipantsOpen, toggleChat]);
   const participantsArray = useMemo(
     () => Array.from(participants.values()),
-    [participants]
+    [participants],
   );
   const visibleParticipantCount = useMemo(
     () =>
       participantsArray.filter(
-        (participant) => !isSystemUserId(participant.userId)
+        (participant) => !isSystemUserId(participant.userId),
       ).length,
-    [participantsArray]
+    [participantsArray],
   );
   const hasBrowserAudio = useMemo(
     () =>
       participantsArray.some(
         (participant) =>
-          isSystemUserId(participant.userId) && Boolean(participant.audioStream)
+          isSystemUserId(participant.userId) &&
+          Boolean(participant.audioStream),
       ),
-    [participantsArray]
+    [participantsArray],
   );
 
   if (!isJoined) {
@@ -279,7 +299,13 @@ function MobileMeetsMainContent({
 
   return (
     <div className="flex-1 flex flex-col bg-[#0d0e0d] overflow-hidden relative h-full">
-      {isJoined && <ConnectionBanner state={connectionState} compact />}
+      {isJoined && (
+        <ConnectionBanner
+          state={connectionState}
+          compact
+          isOffline={isNetworkOffline}
+        />
+      )}
       <SystemAudioPlayers
         participants={participants}
         audioOutputDeviceId={audioOutputDeviceId}
@@ -324,7 +350,10 @@ function MobileMeetsMainContent({
 
       {/* Reactions overlay */}
       {reactions.length > 0 && (
-        <ReactionOverlay reactions={reactions} getDisplayName={resolveDisplayName} />
+        <ReactionOverlay
+          reactions={reactions}
+          getDisplayName={resolveDisplayName}
+        />
       )}
 
       {/* Main content area - with padding for controls */}
@@ -350,7 +379,9 @@ function MobileMeetsMainContent({
           <MobileBrowserLayout
             browserUrl={browserState.url || ""}
             noVncUrl={browserState.noVncUrl}
-            controllerName={resolveDisplayName(browserState.controllerUserId || "")}
+            controllerName={resolveDisplayName(
+              browserState.controllerUserId || "",
+            )}
             localStream={localStream}
             isCameraOff={isCameraOff}
             isMuted={isMuted}
@@ -461,6 +492,8 @@ function MobileMeetsMainContent({
         isAdmin={isAdmin}
         isRoomLocked={isRoomLocked}
         onToggleLock={onToggleLock}
+        isChatLocked={isChatLocked}
+        onToggleChatLock={onToggleChatLock}
         isBrowserActive={browserState?.active ?? false}
         isBrowserLaunching={isBrowserLaunching}
         showBrowserControls={showBrowserControls}
@@ -491,6 +524,8 @@ function MobileMeetsMainContent({
           onClose={handleToggleChat}
           currentUserId={currentUserId}
           isGhostMode={ghostEnabled}
+          isChatLocked={isChatLocked}
+          isAdmin={isAdmin}
           getDisplayName={resolveDisplayName}
         />
       )}
@@ -506,6 +541,7 @@ function MobileMeetsMainContent({
           pendingUsers={pendingUsers}
           getDisplayName={resolveDisplayName}
           hostUserId={hostUserId}
+          isTtsDisabled={isTtsDisabled}
         />
       )}
     </div>

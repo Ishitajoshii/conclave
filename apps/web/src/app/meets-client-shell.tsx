@@ -10,16 +10,19 @@ const roboto = Roboto({
 type MeetsClientShellProps = {
   initialRoomId?: string;
   forceJoinOnly?: boolean;
+  bypassMediaPermissions?: boolean;
 };
 
 export default function MeetsClientShell({
   initialRoomId,
   forceJoinOnly,
+  bypassMediaPermissions,
 }: MeetsClientShellProps) {
   return (
     <MeetsClientPage
       initialRoomId={initialRoomId}
       forceJoinOnly={forceJoinOnly}
+      bypassMediaPermissions={bypassMediaPermissions}
       fontClassName={roboto.className}
     />
   );

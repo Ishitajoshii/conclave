@@ -22,6 +22,14 @@ import {
   buildWebcamSingleLayerEncoding,
 } from "../video-encodings";
 
+const ANDROID_BLUETOOTH_CONNECT_PERMISSION =
+  "android.permission.BLUETOOTH_CONNECT" as Permission;
+
+const shouldRequestBluetoothConnectPermission = () =>
+  Platform.OS === "android" &&
+  typeof Platform.Version === "number" &&
+  Platform.Version >= 31;
+
 interface UseMeetMediaOptions {
   ghostEnabled: boolean;
   connectionState: string;
@@ -178,6 +186,9 @@ export function useMeetMedia({
       const permissions: Permission[] = [];
       if (options.audio) {
         permissions.push(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
+        if (shouldRequestBluetoothConnectPermission()) {
+          permissions.push(ANDROID_BLUETOOTH_CONNECT_PERMISSION);
+        }
       }
       if (options.video) {
         permissions.push(PermissionsAndroid.PERMISSIONS.CAMERA);
@@ -187,15 +198,28 @@ export function useMeetMedia({
       }
 
       const results = await PermissionsAndroid.requestMultiple(permissions);
+      const audioGranted = options.audio
+        ? results[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] ===
+          PermissionsAndroid.RESULTS.GRANTED
+        : false;
+      const videoGranted = options.video
+        ? results[PermissionsAndroid.PERMISSIONS.CAMERA] ===
+          PermissionsAndroid.RESULTS.GRANTED
+        : false;
+      const bluetoothStatus = results[ANDROID_BLUETOOTH_CONNECT_PERMISSION];
+      if (
+        options.audio &&
+        shouldRequestBluetoothConnectPermission() &&
+        bluetoothStatus &&
+        bluetoothStatus !== PermissionsAndroid.RESULTS.GRANTED
+      ) {
+        console.warn(
+          "[Permissions] Bluetooth permission denied; headset audio routing may be unavailable"
+        );
+      }
       return {
-        audio: options.audio
-          ? results[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] ===
-            PermissionsAndroid.RESULTS.GRANTED
-          : false,
-        video: options.video
-          ? results[PermissionsAndroid.PERMISSIONS.CAMERA] ===
-            PermissionsAndroid.RESULTS.GRANTED
-          : false,
+        audio: audioGranted,
+        video: videoGranted,
       };
     },
     []
@@ -1055,24 +1079,11 @@ export function useMeetMedia({
 
     if (nextMuted) {
       const currentTrack = localStreamRef.current?.getAudioTracks()[0];
-      if (currentTrack) {
-        stopLocalTrack(currentTrack);
+      if (currentTrack && currentTrack.readyState === "live") {
+        currentTrack.enabled = false;
       }
 
-      setLocalStream((prev) => {
-        if (!prev) return prev;
-        const remaining = prev
-          .getTracks()
-          .filter((track) => track.kind !== "audio");
-        return new MediaStream(remaining);
-      });
-
       if (producer) {
-        try {
-          await producer.replaceTrack({ track: null });
-        } catch (err) {
-          console.warn("[Meets] Failed to detach audio track:", err);
-        }
         try {
           producer.pause();
         } catch {}
@@ -1088,44 +1099,62 @@ export function useMeetMedia({
     try {
       if (!transport) return;
 
-      const permissionState = await requestAndroidPermissions({
-        audio: true,
-      });
-      if (!permissionState.audio) {
-        setIsMuted(previousMuted);
-        setMeetError({
-          code: "PERMISSION_DENIED",
-          message: "Microphone permission denied",
-          recoverable: true,
-        });
-        return;
+      let audioTrack = localStreamRef.current?.getAudioTracks()[0] ?? null;
+
+      if (audioTrack && audioTrack.readyState !== "live") {
+        stopLocalTrack(audioTrack);
+        audioTrack = null;
       }
 
-      const stream = await getUserMedia({
-        audio: buildAudioConstraints(selectedAudioInputDeviceId),
-      });
-      const audioTrack = stream.getAudioTracks()[0];
-
-      if (!audioTrack) throw new Error("No audio track obtained");
-      audioTrack.onended = () => {
-        handleLocalTrackEnded("audio", audioTrack);
-      };
-
-      setLocalStream((prev) => {
-        if (prev) {
-          const newStream = new MediaStream(prev.getTracks());
-          newStream.getAudioTracks().forEach((t) => {
-            stopLocalTrack(t);
-            newStream.removeTrack(t);
+      if (!audioTrack) {
+        const permissionState = await requestAndroidPermissions({
+          audio: true,
+        });
+        if (!permissionState.audio) {
+          setIsMuted(previousMuted);
+          setMeetError({
+            code: "PERMISSION_DENIED",
+            message: "Microphone permission denied",
+            recoverable: true,
           });
-          newStream.addTrack(audioTrack);
-          return newStream;
+          return;
         }
-        return new MediaStream([audioTrack]);
-      });
+
+        const stream = await getUserMedia({
+          audio: buildAudioConstraints(selectedAudioInputDeviceId),
+        });
+        const nextAudioTrack = stream.getAudioTracks()[0];
+
+        if (!nextAudioTrack) throw new Error("No audio track obtained");
+        nextAudioTrack.onended = () => {
+          handleLocalTrackEnded("audio", nextAudioTrack);
+        };
+
+        setLocalStream((prev) => {
+          if (prev) {
+            const newStream = new MediaStream(prev.getTracks());
+            newStream.getAudioTracks().forEach((t) => {
+              if (t.id === nextAudioTrack.id) return;
+              stopLocalTrack(t);
+              newStream.removeTrack(t);
+            });
+            if (!newStream.getAudioTracks().some((t) => t.id === nextAudioTrack.id)) {
+              newStream.addTrack(nextAudioTrack);
+            }
+            return newStream;
+          }
+          return new MediaStream([nextAudioTrack]);
+        });
+
+        audioTrack = nextAudioTrack;
+      }
+
+      audioTrack.enabled = true;
 
       if (producer) {
-        await producer.replaceTrack({ track: audioTrack });
+        if (!producer.track || producer.track.id !== audioTrack.id) {
+          await producer.replaceTrack({ track: audioTrack });
+        }
         try {
           producer.resume();
         } catch {}
