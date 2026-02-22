@@ -14,7 +14,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { signIn, useSession } from "@/lib/auth-client";
+import { signIn, signOut, useSession } from "@/lib/auth-client";
 import type { RoomInfo } from "@/lib/sfu-types";
 import type { ConnectionState, MeetError } from "../lib/types";
 import {
@@ -34,6 +34,7 @@ import MeetsErrorBanner from "./MeetsErrorBanner";
 
 const normalizeGuestName = (value: string): string =>
   value.trim().replace(/\s+/g, " ");
+const GUEST_USER_STORAGE_KEY = "conclave:guest-user";
 
 const createGuestId = (): string => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -146,6 +147,7 @@ function JoinScreen({
     null
   );
   const isSigningIn = signInProvider !== null;
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const normalizedSegments = useMemo(
     () => normalizedRoomId.split("-"),
     [normalizedRoomId]
@@ -166,6 +168,7 @@ function JoinScreen({
       : "";
 
   const { data: session } = useSession();
+  const canSignOut = Boolean(session?.user || user?.id || user?.email);
   const lastAppliedSessionUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -333,6 +336,36 @@ function JoinScreen({
     } finally {
       setSignInProvider(null);
     }
+  };
+
+  const handleSignOut = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    const clearGuestStorage = () => {
+      if (typeof window === "undefined") return;
+      window.localStorage.removeItem(GUEST_USER_STORAGE_KEY);
+    };
+
+    if (!session?.user) {
+      clearGuestStorage();
+      onUserChange(null);
+      onIsAdminChange(false);
+      setPhase("welcome");
+      setIsSigningOut(false);
+      return;
+    }
+
+    await signOut()
+      .then(() => {
+        clearGuestStorage();
+        onUserChange(null);
+        onIsAdminChange(false);
+        setPhase("welcome");
+      })
+      .catch((error) => {
+        console.error("Sign out error:", error);
+      });
+    setIsSigningOut(false);
   };
 
   const handleGuest = () => {
@@ -606,11 +639,23 @@ function JoinScreen({
                     </button>
                   </div>
 
-                  <div
-                    className="absolute top-3 left-3 px-2.5 py-1 bg-black/50 backdrop-blur-sm rounded-full text-[11px] text-[#FEFCD9]/70"
-                    style={{ fontFamily: "'PolySans Mono', monospace" }}
-                  >
-                    {userEmail}
+                  <div className="absolute top-3 left-3 flex items-center gap-2 max-w-[80%]">
+                    <div
+                      className="min-w-0 px-2.5 py-1 bg-black/50 backdrop-blur-sm rounded-full text-[11px] text-[#FEFCD9]/70 truncate"
+                      style={{ fontFamily: "'PolySans Mono', monospace" }}
+                    >
+                      {userEmail}
+                    </div>
+                    {canSignOut && (
+                      <button
+                        onClick={handleSignOut}
+                        disabled={isSigningOut}
+                        className="shrink-0 px-2.5 py-1 bg-black/50 backdrop-blur-sm rounded-full text-[9px] uppercase tracking-widest text-[#FEFCD9]/70 hover:bg-black/70 disabled:opacity-50"
+                        style={{ fontFamily: "'PolySans Mono', monospace" }}
+                      >
+                        {isSigningOut ? "Signing out..." : "Sign out"}
+                      </button>
+                    )}
                   </div>
                 </div>
 
