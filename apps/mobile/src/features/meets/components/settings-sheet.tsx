@@ -1,24 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, View as RNView } from "react-native";
+import { StyleSheet } from "react-native";
 import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
 import { TrueSheet } from "@lodev09/react-native-true-sheet";
-import { Pressable, Text, TextInput, View } from "@/tw";
 import {
   Check,
-  ClipboardPenLine,
-  Hand,
-  Lock,
-  LockOpen,
+  ChevronDown,
+  ChevronRight,
   Mic,
-  MessageSquareLock,
-  StickyNote,
-  UserMinus,
+  Radio,
+  ShieldCheck,
   Volume2,
-  VolumeX,
 } from "lucide-react-native";
 import { mediaDevices } from "react-native-webrtc";
 import { useApps } from "@conclave/apps-sdk";
+import { Pressable, ScrollView, Text, TextInput, View } from "@/tw";
 import { SHEET_COLORS, SHEET_THEME } from "./true-sheet-theme";
 import type {
   WebinarConfigSnapshot,
@@ -60,11 +56,164 @@ interface SettingsSheetProps {
   onSetWebinarLink?: (link: string | null) => void;
   onGetWebinarConfig?: () => Promise<WebinarConfigSnapshot | null>;
   onUpdateWebinarConfig?: (
-    update: WebinarUpdateRequest,
+    update: WebinarUpdateRequest
   ) => Promise<WebinarConfigSnapshot | null>;
   onGenerateWebinarLink?: () => Promise<WebinarLinkResponse | null>;
   onRotateWebinarLink?: () => Promise<WebinarLinkResponse | null>;
   onClose: () => void;
+}
+
+const ACCENT = {
+  neutral: {
+    fg: SHEET_COLORS.textMuted,
+    bg: "rgba(254, 252, 217, 0.04)",
+    bd: SHEET_COLORS.border,
+  },
+  coral: {
+    fg: "rgba(249, 95, 74, 0.95)",
+    bg: "rgba(249, 95, 74, 0.16)",
+    bd: "rgba(249, 95, 74, 0.5)",
+  },
+  amber: {
+    fg: "rgba(251, 185, 36, 0.95)",
+    bg: "rgba(251, 185, 36, 0.16)",
+    bd: "rgba(251, 185, 36, 0.5)",
+  },
+  blue: {
+    fg: "rgba(96, 165, 250, 0.95)",
+    bg: "rgba(96, 165, 250, 0.16)",
+    bd: "rgba(96, 165, 250, 0.45)",
+  },
+  green: {
+    fg: "rgba(52, 211, 153, 0.95)",
+    bg: "rgba(52, 211, 153, 0.16)",
+    bd: "rgba(52, 211, 153, 0.45)",
+  },
+} as const;
+
+type Accent = keyof typeof ACCENT;
+
+function SectionLabel({ label, icon }: { label: string; icon?: React.ReactNode }) {
+  return (
+    <View style={styles.sectionLabelRow}>
+      {icon}
+      <Text style={styles.sectionLabelText}>{label}</Text>
+    </View>
+  );
+}
+
+interface SettingRowProps {
+  title: string;
+  subtitle?: string;
+  value?: string;
+  active?: boolean;
+  accent?: Accent;
+  onPress?: () => void;
+  disabled?: boolean;
+  showChevron?: boolean;
+}
+
+function SettingRow({
+  title,
+  subtitle,
+  value,
+  active = false,
+  accent = "neutral",
+  onPress,
+  disabled = false,
+  showChevron = false,
+}: SettingRowProps) {
+  const ac = ACCENT[accent];
+  const isDisabled = disabled || !onPress;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={isDisabled}
+      style={[
+        styles.row,
+        active ? { borderColor: ac.bd, backgroundColor: ac.bg } : null,
+        isDisabled ? styles.rowDisabled : null,
+      ]}
+    >
+      <View style={styles.rowLeft}>
+        <Text style={styles.rowTitle}>{title}</Text>
+        {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
+      </View>
+      <View style={styles.rowRight}>
+        {value ? (
+          <Text style={[styles.rowValue, active ? { color: ac.fg, fontWeight: "600" } : null]}>
+            {value}
+          </Text>
+        ) : null}
+        {showChevron ? (
+          <ChevronRight size={16} color={SHEET_COLORS.textFaint} strokeWidth={2.2} />
+        ) : null}
+      </View>
+    </Pressable>
+  );
+}
+
+function DeviceRow({
+  label,
+  selected,
+  onPress,
+  disabled,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={[
+        styles.row,
+        selected ? styles.rowSelected : null,
+        disabled ? styles.rowDisabled : null,
+      ]}
+      accessibilityRole="button"
+      accessibilityState={{ selected, disabled }}
+    >
+      <Text numberOfLines={1} style={[styles.rowTitle, selected ? styles.rowTitleSelected : null]}>
+        {label}
+      </Text>
+      {selected ? <Check size={14} color={SHEET_COLORS.text} strokeWidth={2.2} /> : null}
+    </Pressable>
+  );
+}
+
+interface ActionButtonProps {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  variant?: "default" | "primary" | "danger";
+}
+
+function ActionButton({
+  label,
+  onPress,
+  disabled,
+  variant = "default",
+}: ActionButtonProps) {
+  const variantStyle =
+    variant === "primary"
+      ? styles.actionPrimary
+      : variant === "danger"
+        ? styles.actionDanger
+        : styles.actionDefault;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={[styles.actionButton, variantStyle, disabled ? styles.rowDisabled : null]}
+    >
+      <Text style={styles.actionButtonText}>{label}</Text>
+    </Pressable>
+  );
 }
 
 export function SettingsSheet({
@@ -95,19 +244,16 @@ export function SettingsSheet({
   onClose,
 }: SettingsSheetProps) {
   const { state: appsState, openApp, closeApp } = useApps();
+  const isWhiteboardActive = appsState.activeAppId === "whiteboard";
   const sheetRef = useRef<TrueSheet>(null);
   const hasPresented = useRef(false);
-  const isWhiteboardActive = appsState.activeAppId === "whiteboard";
-  const [audioInputDevices, setAudioInputDevices] = useState<
-    MediaDeviceOption[]
-  >([]);
-  const [audioOutputDevices, setAudioOutputDevices] = useState<
-    MediaDeviceOption[]
-  >([]);
+
+  const [audioInputDevices, setAudioInputDevices] = useState<MediaDeviceOption[]>([]);
+  const [audioOutputDevices, setAudioOutputDevices] = useState<MediaDeviceOption[]>([]);
   const [isLoadingAudioDevices, setIsLoadingAudioDevices] = useState(false);
-  const [audioDevicesError, setAudioDevicesError] = useState<string | null>(
-    null
-  );
+  const [audioDevicesError, setAudioDevicesError] = useState<string | null>(null);
+
+  const [webinarExpanded, setWebinarExpanded] = useState(false);
   const [webinarInviteCodeInput, setWebinarInviteCodeInput] = useState("");
   const [webinarCapInput, setWebinarCapInput] = useState(
     String(webinarConfig?.maxAttendees ?? 500)
@@ -140,27 +286,19 @@ export function SettingsSheet({
     ? selectedAudioOutputDeviceId
     : availableAudioOutputDevices[0]?.deviceId;
 
+  const trigger = useCallback((action: () => void) => {
+    Haptics.selectionAsync().catch(() => {});
+    action();
+  }, []);
+
   const handleDismiss = useCallback(() => {
     void sheetRef.current?.dismiss();
   }, []);
-
-  const handleToggleWhiteboard = useCallback(() => {
-    if (isWhiteboardActive) {
-      closeApp();
-      return;
-    }
-    openApp("whiteboard");
-  }, [closeApp, isWhiteboardActive, openApp]);
 
   const handleDidDismiss = useCallback(() => {
     hasPresented.current = false;
     onClose();
   }, [onClose]);
-
-  const trigger = useCallback((action: () => void) => {
-    Haptics.selectionAsync().catch(() => {});
-    action();
-  }, []);
 
   const fetchAudioDevices = useCallback(async () => {
     if (!mediaDevices?.enumerateDevices) {
@@ -201,8 +339,7 @@ export function SettingsSheet({
 
       setAudioInputDevices(nextAudioInputDevices);
       setAudioOutputDevices(nextAudioOutputDevices);
-    } catch (error) {
-      console.error("[SettingsSheet] Failed to enumerate audio devices:", error);
+    } catch {
       setAudioDevicesError("Unable to load audio devices.");
       setAudioInputDevices([]);
       setAudioOutputDevices([]);
@@ -311,966 +448,655 @@ export function SettingsSheet({
   return (
     <TrueSheet
       ref={sheetRef}
-      detents={["auto"]}
+      detents={[0.6, 1]}
+      scrollable
       onDidDismiss={handleDidDismiss}
       {...SHEET_THEME}
     >
-      <View style={styles.sheetContent}>
-        <RNView style={styles.dragHandle} />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.sheetContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.headerRow}>
+          <Text style={styles.headerText}>Settings</Text>
+          <Pressable onPress={handleDismiss} style={styles.closeButton}>
+            <Text style={styles.closeText}>Done</Text>
+          </Pressable>
+        </View>
 
-        <RNView style={styles.grid}>
-          {isAdmin ? (
-            <Pressable
-              onPress={() =>
-                trigger(() => {
-                  handleToggleWhiteboard();
-                  handleDismiss();
-                })
-              }
-              style={({ pressed }) => [
-                styles.gridItem,
-                isWhiteboardActive && styles.gridItemActive,
-                pressed && styles.gridItemPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={
-                isWhiteboardActive ? "Close whiteboard" : "Open whiteboard"
-              }
-              accessibilityState={{ selected: isWhiteboardActive }}
-            >
-              <StickyNote
-                size={28}
-                color={SHEET_COLORS.text}
-                fill={isWhiteboardActive ? "rgba(254, 252, 217, 0.35)" : "transparent"}
-                strokeWidth={1.5}
-              />
-            </Pressable>
-          ) : null}
-
-          <Pressable
+        <SectionLabel label="You" />
+        <View style={styles.listContent}>
+          <SettingRow
+            title="Raise hand"
+            subtitle="Signal to the host"
+            value={isHandRaised ? "Raised" : "Off"}
+            active={isHandRaised}
+            accent="amber"
             onPress={() => trigger(onToggleHandRaised)}
-            style={({ pressed }) => [
-              styles.gridItem,
-              isHandRaised && styles.gridItemHandActive,
-              pressed && styles.gridItemPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Toggle raise hand"
-            accessibilityState={{ selected: isHandRaised }}
-          >
-            <Hand
-              size={28}
-              color={SHEET_COLORS.text}
-              fill={isHandRaised ? "rgba(0, 0, 0, 0.35)" : "transparent"}
-              strokeWidth={1.5}
-            />
-          </Pressable>
-
-          <Pressable
-            onPress={() => {
-              if (!onOpenDisplayName) return;
-              trigger(onOpenDisplayName);
-            }}
-            style={({ pressed }) => [
-              styles.gridItem,
-              pressed && styles.gridItemPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Change display name"
-          >
-            <ClipboardPenLine size={28} color={SHEET_COLORS.text} strokeWidth={1.5} />
-          </Pressable>
-
-          {isAdmin ? (
-            <Pressable
-              onPress={() => {
-                if (!onToggleRoomLock) return;
-                trigger(() => onToggleRoomLock(!isRoomLocked));
-              }}
-              style={({ pressed }) => [
-                styles.gridItem,
-                isRoomLocked && styles.gridItemLockActive,
-                pressed && styles.gridItemPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={isRoomLocked ? "Unlock room" : "Lock room"}
-              accessibilityState={{ selected: isRoomLocked }}
-            >
-              {isRoomLocked ? (
-                <Lock
-                  size={28}
-                  color={SHEET_COLORS.text}
-                  strokeWidth={1.5}
-                />
-              ) : (
-                <LockOpen
-                  size={28}
-                  color={SHEET_COLORS.text}
-                  strokeWidth={1.5}
-                />
-              )}
-            </Pressable>
-          ) : null}
-          {isAdmin ? (
-            <Pressable
-              onPress={() => {
-                if (!onToggleNoGuests) return;
-                trigger(() => onToggleNoGuests(!isNoGuests));
-              }}
-              style={({ pressed }) => [
-                styles.gridItem,
-                isNoGuests && styles.gridItemHandActive,
-                pressed && styles.gridItemPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={isNoGuests ? "Allow guests" : "Block guests"}
-              accessibilityState={{ selected: isNoGuests }}
-            >
-              <UserMinus size={28} color={SHEET_COLORS.text} strokeWidth={1.5} />
-            </Pressable>
-          ) : null}
-          {isAdmin ? (
-            <Pressable
-              onPress={() => {
-                if (!onToggleChatLock) return;
-                trigger(() => onToggleChatLock(!isChatLocked));
-              }}
-              style={({ pressed }) => [
-                styles.gridItem,
-                isChatLocked && styles.gridItemLockActive,
-                pressed && styles.gridItemPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={isChatLocked ? "Unlock chat" : "Lock chat"}
-              accessibilityState={{ selected: isChatLocked }}
-            >
-              <MessageSquareLock
-                size={28}
-                color={SHEET_COLORS.text}
-                strokeWidth={1.5}
-              />
-            </Pressable>
-          ) : null}
-          {isAdmin ? (
-            <Pressable
-              onPress={() => {
-                if (!onToggleTtsDisabled) return;
-                trigger(() => onToggleTtsDisabled(!isTtsDisabled));
-              }}
-              style={({ pressed }) => [
-                styles.gridItem,
-                isTtsDisabled && styles.gridItemActive,
-                pressed && styles.gridItemPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={isTtsDisabled ? "Enable text to speech" : "Disable text to speech"}
-              accessibilityState={{ selected: isTtsDisabled }}
-            >
-              <VolumeX size={28} color={SHEET_COLORS.text} strokeWidth={1.5} />
-            </Pressable>
-          ) : null}
-        </RNView>
+          />
+          <SettingRow
+            title="Display name"
+            subtitle="Update what others see"
+            value="Edit"
+            showChevron
+            onPress={onOpenDisplayName ? () => trigger(onOpenDisplayName) : undefined}
+            disabled={!onOpenDisplayName}
+          />
+        </View>
 
         {isAdmin ? (
-          <RNView style={styles.webinarSection}>
-            <RNView style={styles.webinarHeaderRow}>
-              <RNView style={styles.webinarTitleRow}>
-                <Text style={styles.audioHeaderText}>Webinar</Text>
-              </RNView>
-              <RNView style={styles.webinarCountPill}>
-                <Text style={styles.webinarCountPillText}>
-                  {webinarConfig?.attendeeCount ?? 0} /{" "}
-                  {webinarConfig?.maxAttendees ?? 500}
-                </Text>
-              </RNView>
-            </RNView>
-
-            <RNView style={styles.webinarToggleRow}>
-              <Pressable
-                onPress={() =>
-                  trigger(() => {
-                    void runWebinarTask(
-                      async () => {
-                        if (!onUpdateWebinarConfig) {
-                          throw new Error("Webinar controls unavailable.");
-                        }
-                        const next = await onUpdateWebinarConfig({
-                          enabled: !webinarEnabled,
-                        });
-                        if (!next) {
-                          throw new Error("Webinar update rejected.");
-                        }
-                      },
-                      {
-                        successMessage: webinarEnabled
-                          ? "Webinar disabled."
-                          : "Webinar enabled.",
-                      }
-                    );
-                  })
-                }
-                disabled={isWebinarWorking || !onUpdateWebinarConfig}
-                style={({ pressed }) => [
-                  styles.webinarTogglePill,
-                  webinarEnabled && styles.webinarTogglePillActive,
-                  pressed && styles.deviceButtonPressed,
-                ]}
-              >
-                <Text style={styles.webinarTogglePillLabel}>Webinar</Text>
-                <Text
-                  style={[
-                    styles.webinarTogglePillValue,
-                    webinarEnabled && styles.webinarTogglePillValueActive,
-                  ]}
-                >
-                  {webinarEnabled ? "ON" : "OFF"}
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() =>
-                  trigger(() => {
-                    void runWebinarTask(
-                      async () => {
-                        if (!onUpdateWebinarConfig) {
-                          throw new Error("Webinar controls unavailable.");
-                        }
-                        const next = await onUpdateWebinarConfig({
-                          publicAccess: !webinarPublicAccess,
-                        });
-                        if (!next) {
-                          throw new Error("Webinar update rejected.");
-                        }
-                      },
-                      {
-                        successMessage: webinarPublicAccess
-                          ? "Public access disabled."
-                          : "Public access enabled.",
-                      }
-                    );
-                  })
-                }
-                disabled={
-                  isWebinarWorking ||
-                  !onUpdateWebinarConfig ||
-                  !webinarEnabled
-                }
-                style={({ pressed }) => [
-                  styles.webinarTogglePill,
-                  webinarPublicAccess && styles.webinarTogglePillActive,
-                  !webinarEnabled && styles.webinarTogglePillDisabled,
-                  pressed && styles.deviceButtonPressed,
-                ]}
-              >
-                <Text style={styles.webinarTogglePillLabel}>Public</Text>
-                <Text
-                  style={[
-                    styles.webinarTogglePillValue,
-                    webinarPublicAccess && styles.webinarTogglePillValueActive,
-                  ]}
-                >
-                  {webinarPublicAccess ? "ON" : "OFF"}
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() =>
-                  trigger(() => {
-                    void runWebinarTask(
-                      async () => {
-                        if (!onUpdateWebinarConfig) {
-                          throw new Error("Webinar controls unavailable.");
-                        }
-                        const next = await onUpdateWebinarConfig({
-                          locked: !webinarLocked,
-                        });
-                        if (!next) {
-                          throw new Error("Webinar update rejected.");
-                        }
-                      },
-                      {
-                        successMessage: webinarLocked
-                          ? "Webinar unlocked."
-                          : "Webinar locked.",
-                      }
-                    );
-                  })
-                }
-                disabled={
-                  isWebinarWorking ||
-                  !onUpdateWebinarConfig ||
-                  !webinarEnabled
-                }
-                style={({ pressed }) => [
-                  styles.webinarTogglePill,
-                  webinarLocked && styles.webinarTogglePillLock,
-                  !webinarEnabled && styles.webinarTogglePillDisabled,
-                  pressed && styles.deviceButtonPressed,
-                ]}
-              >
-                <Text style={styles.webinarTogglePillLabel}>Lock</Text>
-                <Text
-                  style={[
-                    styles.webinarTogglePillValue,
-                    webinarLocked && styles.webinarTogglePillValueActive,
-                  ]}
-                >
-                  {webinarLocked ? "ON" : "OFF"}
-                </Text>
-              </Pressable>
-            </RNView>
-
-            <RNView style={styles.webinarMetaRow}>
-              <RNView
-                style={[
-                  styles.webinarMetaPill,
-                  webinarRequiresInviteCode && styles.webinarMetaPillActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.webinarMetaText,
-                    webinarRequiresInviteCode && styles.webinarMetaTextActive,
-                  ]}
-                >
-                  {webinarRequiresInviteCode ? "Invite code ON" : "Invite code OFF"}
-                </Text>
-              </RNView>
-              <RNView style={styles.webinarMetaPill}>
-                <Text style={styles.webinarMetaText}>Feed: active speaker</Text>
-              </RNView>
-            </RNView>
-
-            <RNView style={styles.webinarRow}>
-              <TextInput
-                value={webinarCapInput}
-                onChangeText={setWebinarCapInput}
-                keyboardType="number-pad"
-                placeholder="Attendee cap"
-                placeholderTextColor={SHEET_COLORS.textFaint}
-                style={styles.webinarInput}
-              />
-              <Pressable
-                onPress={() =>
-                  trigger(() => {
-                    void runWebinarTask(
-                      async () => {
-                        if (!onUpdateWebinarConfig) {
-                          throw new Error("Webinar controls unavailable.");
-                        }
-                        if (webinarCapValue == null) {
-                          throw new Error("Enter a valid attendee cap.");
-                        }
-                        const next = await onUpdateWebinarConfig({
-                          maxAttendees: webinarCapValue,
-                        });
-                        if (!next) {
-                          throw new Error("Webinar update rejected.");
-                        }
-                      },
-                      { successMessage: "Attendee cap updated." }
-                    );
-                  })
-                }
-                disabled={
-                  isWebinarWorking ||
-                  !onUpdateWebinarConfig ||
-                  !webinarEnabled ||
-                  webinarCapValue == null
-                }
-                style={({ pressed }) => [
-                  styles.webinarButton,
-                  styles.webinarButtonPrimary,
-                  pressed && styles.deviceButtonPressed,
-                ]}
-              >
-                <Text style={styles.webinarButtonText}>Save cap</Text>
-              </Pressable>
-            </RNView>
-
-            <RNView style={styles.webinarRow}>
-              <TextInput
-                value={webinarInviteCodeInput}
-                onChangeText={setWebinarInviteCodeInput}
-                placeholder="Invite code"
-                placeholderTextColor={SHEET_COLORS.textFaint}
-                style={styles.webinarInput}
-              />
-              <Pressable
-                onPress={() =>
-                  trigger(() => {
-                    void runWebinarTask(
-                      async () => {
-                        if (!onUpdateWebinarConfig) {
-                          throw new Error("Webinar controls unavailable.");
-                        }
-                        const next = await onUpdateWebinarConfig({
-                          inviteCode: webinarInviteCodeInput.trim(),
-                        });
-                        if (!next) {
-                          throw new Error("Webinar update rejected.");
-                        }
-                      },
-                      {
-                        successMessage: "Invite code saved.",
-                        clearInviteInput: true,
-                      }
-                    );
-                  })
-                }
-                disabled={
-                  isWebinarWorking ||
-                  !onUpdateWebinarConfig ||
-                  !webinarEnabled ||
-                  !webinarInviteCodeInput.trim()
-                }
-                style={({ pressed }) => [
-                  styles.webinarButton,
-                  styles.webinarButtonPrimary,
-                  pressed && styles.deviceButtonPressed,
-                ]}
-              >
-                <Text style={styles.webinarButtonText}>Save</Text>
-              </Pressable>
-              <Pressable
-                onPress={() =>
-                  trigger(() => {
-                    void runWebinarTask(
-                      async () => {
-                        if (!onUpdateWebinarConfig) {
-                          throw new Error("Webinar controls unavailable.");
-                        }
-                        const next = await onUpdateWebinarConfig({
-                          inviteCode: null,
-                        });
-                        if (!next) {
-                          throw new Error("Webinar update rejected.");
-                        }
-                      },
-                      { successMessage: "Invite code cleared." }
-                    );
-                  })
-                }
-                disabled={
-                  isWebinarWorking ||
-                  !onUpdateWebinarConfig ||
-                  !webinarRequiresInviteCode
-                }
-                style={({ pressed }) => [
-                  styles.webinarButton,
-                  styles.webinarButtonDanger,
-                  pressed && styles.deviceButtonPressed,
-                ]}
-              >
-                <Text style={styles.webinarButtonText}>Clear</Text>
-              </Pressable>
-            </RNView>
-
-            <TextInput
-              value={webinarLink ?? ""}
-              editable={false}
-              placeholder="Generate webinar link"
-              placeholderTextColor={SHEET_COLORS.textFaint}
-              style={styles.webinarInput}
+          <>
+            <SectionLabel
+              label="Host controls"
+              icon={<ShieldCheck size={12} color={SHEET_COLORS.textMuted} strokeWidth={2} />}
             />
-            <RNView style={styles.webinarRow}>
-              <Pressable
+            <View style={styles.listContent}>
+              <SettingRow
+                title="Whiteboard"
+                subtitle="Shared canvas for participants"
+                value={isWhiteboardActive ? "Open" : "Off"}
+                active={isWhiteboardActive}
                 onPress={() =>
                   trigger(() => {
-                    void runWebinarTask(async () => {
-                      if (!onGenerateWebinarLink) {
-                        throw new Error("Webinar link generation unavailable.");
-                      }
-                      const linkResponse = await onGenerateWebinarLink();
-                      if (!linkResponse?.link) {
-                        throw new Error("Webinar link unavailable.");
-                      }
-                      onSetWebinarLink?.(linkResponse.link);
-                      await copyWebinarLink(linkResponse.link);
-                    }, { successMessage: "Webinar link copied." });
+                    if (isWhiteboardActive) closeApp();
+                    else openApp("whiteboard");
                   })
                 }
-                disabled={
-                  isWebinarWorking ||
-                  !onGenerateWebinarLink ||
-                  !webinarEnabled
+              />
+              <SettingRow
+                title="Lock room"
+                subtitle="Prevent new joins"
+                value={isRoomLocked ? "Locked" : "Open"}
+                active={isRoomLocked}
+                accent="blue"
+                onPress={onToggleRoomLock ? () => trigger(() => onToggleRoomLock(!isRoomLocked)) : undefined}
+                disabled={!onToggleRoomLock}
+              />
+              <SettingRow
+                title="Block guests"
+                subtitle="Only invited users can join"
+                value={isNoGuests ? "Blocked" : "Allow"}
+                active={isNoGuests}
+                accent="amber"
+                onPress={onToggleNoGuests ? () => trigger(() => onToggleNoGuests(!isNoGuests)) : undefined}
+                disabled={!onToggleNoGuests}
+              />
+              <SettingRow
+                title="Lock chat"
+                subtitle="Stop attendees from sending messages"
+                value={isChatLocked ? "Locked" : "Open"}
+                active={isChatLocked}
+                accent="blue"
+                onPress={onToggleChatLock ? () => trigger(() => onToggleChatLock(!isChatLocked)) : undefined}
+                disabled={!onToggleChatLock}
+              />
+              <SettingRow
+                title="Mute TTS"
+                subtitle="Disable voice playback"
+                value={isTtsDisabled ? "Muted" : "On"}
+                active={isTtsDisabled}
+                accent="coral"
+                onPress={
+                  onToggleTtsDisabled
+                    ? () => trigger(() => onToggleTtsDisabled(!isTtsDisabled))
+                    : undefined
                 }
-                style={({ pressed }) => [
-                  styles.webinarButton,
-                  styles.webinarButtonPrimary,
-                  pressed && styles.deviceButtonPressed,
-                ]}
-              >
-                <Text style={styles.webinarButtonText}>Generate</Text>
-              </Pressable>
-              <Pressable
-                onPress={() =>
-                  trigger(() => {
-                    void runWebinarTask(async () => {
-                      if (!onRotateWebinarLink) {
-                        throw new Error("Webinar link rotation unavailable.");
-                      }
-                      const linkResponse = await onRotateWebinarLink();
-                      if (!linkResponse?.link) {
-                        throw new Error("Webinar link unavailable.");
-                      }
-                      onSetWebinarLink?.(linkResponse.link);
-                      await copyWebinarLink(linkResponse.link);
-                    }, { successMessage: "Webinar link rotated and copied." });
-                  })
-                }
-                disabled={
-                  isWebinarWorking ||
-                  !onRotateWebinarLink ||
-                  !webinarEnabled
-                }
-                style={({ pressed }) => [
-                  styles.webinarButton,
-                  styles.webinarButtonDanger,
-                  pressed && styles.deviceButtonPressed,
-                ]}
-              >
-                <Text style={styles.webinarButtonText}>Rotate</Text>
-              </Pressable>
-              <Pressable
-                onPress={() =>
-                  trigger(() => {
-                    void runWebinarTask(async () => {
-                      await copyWebinarLink(webinarLink ?? "");
-                    }, { successMessage: "Webinar link copied." });
-                  })
-                }
-                disabled={isWebinarWorking || !webinarLink}
-                style={({ pressed }) => [
-                  styles.webinarButton,
-                  pressed && styles.deviceButtonPressed,
-                ]}
-              >
-                <Text style={styles.webinarButtonText}>Copy</Text>
-              </Pressable>
-            </RNView>
+                disabled={!onToggleTtsDisabled}
+              />
+            </View>
 
-            {webinarNotice ? (
-              <Text style={styles.webinarNoticeText}>{webinarNotice}</Text>
+            <SectionLabel label="Webinar" icon={<Radio size={12} color={SHEET_COLORS.textMuted} strokeWidth={2} />} />
+            <View style={styles.listContent}>
+              <Pressable
+                onPress={() => trigger(() => setWebinarExpanded((value) => !value))}
+                style={styles.row}
+              >
+                <View style={styles.rowLeft}>
+                  <Text style={styles.rowTitle}>Webinar controls</Text>
+                  <Text style={styles.rowSubtitle}>
+                    {webinarEnabled
+                      ? `${webinarConfig?.attendeeCount ?? 0} / ${webinarConfig?.maxAttendees ?? 500} attendees`
+                      : "Off"}
+                  </Text>
+                </View>
+                <View style={styles.rowRight}>
+                  <Text
+                    style={[
+                      styles.rowValue,
+                      webinarEnabled ? { color: ACCENT.coral.fg, fontWeight: "600" } : null,
+                    ]}
+                  >
+                    {webinarEnabled ? "Live" : "Off"}
+                  </Text>
+                  {webinarExpanded ? (
+                    <ChevronDown size={16} color={SHEET_COLORS.textFaint} strokeWidth={2.2} />
+                  ) : (
+                    <ChevronRight size={16} color={SHEET_COLORS.textFaint} strokeWidth={2.2} />
+                  )}
+                </View>
+              </Pressable>
+            </View>
+
+            {webinarExpanded ? (
+              <View style={styles.webinarPanel}>
+                <View style={styles.listContent}>
+                  <SettingRow
+                    title="Webinar enabled"
+                    value={webinarEnabled ? "On" : "Off"}
+                    active={webinarEnabled}
+                    accent="coral"
+                    onPress={() =>
+                      trigger(() => {
+                        void runWebinarTask(
+                          async () => {
+                            if (!onUpdateWebinarConfig) {
+                              throw new Error("Webinar controls unavailable.");
+                            }
+                            const next = await onUpdateWebinarConfig({
+                              enabled: !webinarEnabled,
+                            });
+                            if (!next) {
+                              throw new Error("Webinar update rejected.");
+                            }
+                          },
+                          {
+                            successMessage: webinarEnabled
+                              ? "Webinar disabled."
+                              : "Webinar enabled.",
+                          }
+                        );
+                      })
+                    }
+                    disabled={isWebinarWorking || !onUpdateWebinarConfig}
+                  />
+                  <SettingRow
+                    title="Public access"
+                    value={webinarPublicAccess ? "Public" : "Private"}
+                    active={webinarPublicAccess}
+                    accent="green"
+                    onPress={() =>
+                      trigger(() => {
+                        void runWebinarTask(
+                          async () => {
+                            if (!onUpdateWebinarConfig) {
+                              throw new Error("Webinar controls unavailable.");
+                            }
+                            const next = await onUpdateWebinarConfig({
+                              publicAccess: !webinarPublicAccess,
+                            });
+                            if (!next) {
+                              throw new Error("Webinar update rejected.");
+                            }
+                          },
+                          {
+                            successMessage: webinarPublicAccess
+                              ? "Public access disabled."
+                              : "Public access enabled.",
+                          }
+                        );
+                      })
+                    }
+                    disabled={
+                      isWebinarWorking || !onUpdateWebinarConfig || !webinarEnabled
+                    }
+                  />
+                  <SettingRow
+                    title="Lock webinar"
+                    value={webinarLocked ? "Locked" : "Open"}
+                    active={webinarLocked}
+                    accent="blue"
+                    onPress={() =>
+                      trigger(() => {
+                        void runWebinarTask(
+                          async () => {
+                            if (!onUpdateWebinarConfig) {
+                              throw new Error("Webinar controls unavailable.");
+                            }
+                            const next = await onUpdateWebinarConfig({
+                              locked: !webinarLocked,
+                            });
+                            if (!next) {
+                              throw new Error("Webinar update rejected.");
+                            }
+                          },
+                          {
+                            successMessage: webinarLocked
+                              ? "Webinar unlocked."
+                              : "Webinar locked.",
+                          }
+                        );
+                      })
+                    }
+                    disabled={
+                      isWebinarWorking || !onUpdateWebinarConfig || !webinarEnabled
+                    }
+                  />
+                </View>
+
+                <View style={styles.fieldCard}>
+                  <Text style={styles.fieldHeaderText}>Attendee cap</Text>
+                  <View style={styles.fieldRow}>
+                    <TextInput
+                      value={webinarCapInput}
+                      onChangeText={setWebinarCapInput}
+                      keyboardType="number-pad"
+                      placeholder="Attendee cap"
+                      placeholderTextColor={SHEET_COLORS.textFaint}
+                      style={styles.input}
+                    />
+                    <ActionButton
+                      label="Save"
+                      variant="primary"
+                      onPress={() =>
+                        trigger(() => {
+                          void runWebinarTask(
+                            async () => {
+                              if (!onUpdateWebinarConfig) {
+                                throw new Error("Webinar controls unavailable.");
+                              }
+                              if (webinarCapValue == null) {
+                                throw new Error("Enter a valid attendee cap.");
+                              }
+                              const next = await onUpdateWebinarConfig({
+                                maxAttendees: webinarCapValue,
+                              });
+                              if (!next) {
+                                throw new Error("Webinar update rejected.");
+                              }
+                            },
+                            { successMessage: "Attendee cap updated." }
+                          );
+                        })
+                      }
+                      disabled={
+                        isWebinarWorking ||
+                        !onUpdateWebinarConfig ||
+                        !webinarEnabled ||
+                        webinarCapValue == null
+                      }
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.fieldCard}>
+                  <Text style={styles.fieldHeaderText}>Invite code</Text>
+                  <View style={styles.fieldRow}>
+                    <TextInput
+                      value={webinarInviteCodeInput}
+                      onChangeText={setWebinarInviteCodeInput}
+                      placeholder="Invite code"
+                      placeholderTextColor={SHEET_COLORS.textFaint}
+                      style={styles.input}
+                    />
+                    <ActionButton
+                      label="Save"
+                      variant="primary"
+                      onPress={() =>
+                        trigger(() => {
+                          void runWebinarTask(
+                            async () => {
+                              if (!onUpdateWebinarConfig) {
+                                throw new Error("Webinar controls unavailable.");
+                              }
+                              const next = await onUpdateWebinarConfig({
+                                inviteCode: webinarInviteCodeInput.trim(),
+                              });
+                              if (!next) {
+                                throw new Error("Webinar update rejected.");
+                              }
+                            },
+                            {
+                              successMessage: "Invite code saved.",
+                              clearInviteInput: true,
+                            }
+                          );
+                        })
+                      }
+                      disabled={
+                        isWebinarWorking ||
+                        !onUpdateWebinarConfig ||
+                        !webinarEnabled ||
+                        !webinarInviteCodeInput.trim()
+                      }
+                    />
+                    <ActionButton
+                      label="Clear"
+                      variant="danger"
+                      onPress={() =>
+                        trigger(() => {
+                          void runWebinarTask(
+                            async () => {
+                              if (!onUpdateWebinarConfig) {
+                                throw new Error("Webinar controls unavailable.");
+                              }
+                              const next = await onUpdateWebinarConfig({
+                                inviteCode: null,
+                              });
+                              if (!next) {
+                                throw new Error("Webinar update rejected.");
+                              }
+                            },
+                            { successMessage: "Invite code cleared." }
+                          );
+                        })
+                      }
+                      disabled={
+                        isWebinarWorking ||
+                        !onUpdateWebinarConfig ||
+                        !webinarRequiresInviteCode
+                      }
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.fieldCard}>
+                  <Text style={styles.fieldHeaderText}>Invite link</Text>
+                  <TextInput
+                    value={webinarLink ?? ""}
+                    editable={false}
+                    placeholder="Generate webinar link"
+                    placeholderTextColor={SHEET_COLORS.textFaint}
+                    style={[styles.input, styles.readonlyInput]}
+                  />
+                  <View style={styles.fieldRow}>
+                    <ActionButton
+                      label="Generate"
+                      variant="primary"
+                      onPress={() =>
+                        trigger(() => {
+                          void runWebinarTask(async () => {
+                            if (!onGenerateWebinarLink) {
+                              throw new Error("Webinar link generation unavailable.");
+                            }
+                            const linkResponse = await onGenerateWebinarLink();
+                            if (!linkResponse?.link) {
+                              throw new Error("Webinar link unavailable.");
+                            }
+                            onSetWebinarLink?.(linkResponse.link);
+                            await copyWebinarLink(linkResponse.link);
+                          }, { successMessage: "Webinar link copied." });
+                        })
+                      }
+                      disabled={
+                        isWebinarWorking || !onGenerateWebinarLink || !webinarEnabled
+                      }
+                    />
+                    <ActionButton
+                      label="Rotate"
+                      variant="danger"
+                      onPress={() =>
+                        trigger(() => {
+                          void runWebinarTask(async () => {
+                            if (!onRotateWebinarLink) {
+                              throw new Error("Webinar link rotation unavailable.");
+                            }
+                            const linkResponse = await onRotateWebinarLink();
+                            if (!linkResponse?.link) {
+                              throw new Error("Webinar link unavailable.");
+                            }
+                            onSetWebinarLink?.(linkResponse.link);
+                            await copyWebinarLink(linkResponse.link);
+                          }, { successMessage: "Webinar link rotated and copied." });
+                        })
+                      }
+                      disabled={
+                        isWebinarWorking || !onRotateWebinarLink || !webinarEnabled
+                      }
+                    />
+                    <ActionButton
+                      label="Copy"
+                      onPress={() =>
+                        trigger(() => {
+                          void runWebinarTask(async () => {
+                            await copyWebinarLink(webinarLink ?? "");
+                          }, { successMessage: "Webinar link copied." });
+                        })
+                      }
+                      disabled={isWebinarWorking || !webinarLink}
+                    />
+                  </View>
+                </View>
+
+                {webinarNotice ? <Text style={styles.noticeText}>{webinarNotice}</Text> : null}
+                {webinarError ? <Text style={styles.errorText}>{webinarError}</Text> : null}
+              </View>
             ) : null}
-            {webinarError ? (
-              <Text style={styles.webinarErrorText}>{webinarError}</Text>
-            ) : null}
-          </RNView>
+          </>
         ) : null}
 
-        <RNView style={styles.audioSection}>
-          <RNView style={styles.audioHeaderRow}>
-            <Mic size={14} color={SHEET_COLORS.textMuted} strokeWidth={1.8} />
-            <Text style={styles.audioHeaderText}>Microphone</Text>
-          </RNView>
-          <RNView style={styles.deviceList}>
-            {audioInputDevices.length === 0 ? (
-              <RNView style={styles.devicePlaceholder}>
-                <Text style={styles.devicePlaceholderText}>
-                  No microphones found
-                </Text>
-              </RNView>
-            ) : (
-              audioInputDevices.map((device, index) => {
-                const isSelected =
-                  selectedAudioInputId != null
-                    ? selectedAudioInputId === device.deviceId
-                    : index === 0;
-
-                return (
-                  <Pressable
-                    key={`${device.deviceId || "audio-input"}-${index}`}
-                    onPress={() => {
-                      if (!onAudioInputDeviceChange) return;
-                      trigger(() => onAudioInputDeviceChange(device.deviceId));
-                    }}
-                    disabled={!onAudioInputDeviceChange}
-                    style={({ pressed }) => [
-                      styles.deviceButton,
-                      isSelected && styles.deviceButtonSelected,
-                      pressed && styles.deviceButtonPressed,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Select microphone ${device.label}`}
-                    accessibilityState={{ selected: isSelected }}
-                  >
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.deviceButtonLabel,
-                        isSelected && styles.deviceButtonLabelSelected,
-                      ]}
-                    >
-                      {device.label}
-                    </Text>
-                    {isSelected ? (
-                      <Check
-                        size={14}
-                        color={SHEET_COLORS.text}
-                        strokeWidth={2}
-                      />
-                    ) : null}
-                  </Pressable>
-                );
-              })
-            )}
-          </RNView>
-        </RNView>
-
-        <RNView style={styles.audioSection}>
-          <RNView style={styles.audioHeaderRow}>
-            <Volume2 size={14} color={SHEET_COLORS.textMuted} strokeWidth={1.8} />
-            <Text style={styles.audioHeaderText}>Speaker</Text>
-          </RNView>
-          <RNView style={styles.deviceList}>
-            {availableAudioOutputDevices.map((device, index) => {
+        <SectionLabel label="Microphone" icon={<Mic size={12} color={SHEET_COLORS.textMuted} strokeWidth={2} />} />
+        <View style={styles.listContent}>
+          {audioInputDevices.length === 0 ? (
+            <View style={styles.row}>
+              <Text style={styles.rowTitle}>No microphones found</Text>
+            </View>
+          ) : (
+            audioInputDevices.map((device, index) => {
               const isSelected =
-                selectedAudioOutputId != null
-                  ? selectedAudioOutputId === device.deviceId
+                selectedAudioInputId != null
+                  ? selectedAudioInputId === device.deviceId
                   : index === 0;
-
               return (
-                <Pressable
-                  key={`${device.deviceId || "audio-output"}-${index}`}
+                <DeviceRow
+                  key={`${device.deviceId || "audio-input"}-${index}`}
+                  label={device.label}
+                  selected={isSelected}
                   onPress={() => {
-                    if (!onAudioOutputDeviceChange) return;
-                    trigger(() => onAudioOutputDeviceChange(device.deviceId));
+                    if (!onAudioInputDeviceChange) return;
+                    trigger(() => onAudioInputDeviceChange(device.deviceId));
                   }}
-                  disabled={!onAudioOutputDeviceChange}
-                  style={({ pressed }) => [
-                    styles.deviceButton,
-                    isSelected && styles.deviceButtonSelected,
-                    pressed && styles.deviceButtonPressed,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Select speaker ${device.label}`}
-                  accessibilityState={{ selected: isSelected }}
-                >
-                  <Text
-                    numberOfLines={1}
-                    style={[
-                      styles.deviceButtonLabel,
-                      isSelected && styles.deviceButtonLabelSelected,
-                    ]}
-                  >
-                    {device.label}
-                  </Text>
-                  {isSelected ? (
-                    <Check size={14} color={SHEET_COLORS.text} strokeWidth={2} />
-                  ) : null}
-                </Pressable>
+                  disabled={!onAudioInputDeviceChange}
+                />
               );
-            })}
-          </RNView>
-        </RNView>
+            })
+          )}
+        </View>
+
+        <SectionLabel label="Speaker" icon={<Volume2 size={12} color={SHEET_COLORS.textMuted} strokeWidth={2} />} />
+        <View style={styles.listContent}>
+          {availableAudioOutputDevices.map((device, index) => {
+            const isSelected =
+              selectedAudioOutputId != null
+                ? selectedAudioOutputId === device.deviceId
+                : index === 0;
+            return (
+              <DeviceRow
+                key={`${device.deviceId || "audio-output"}-${index}`}
+                label={device.label}
+                selected={isSelected}
+                onPress={() => {
+                  if (!onAudioOutputDeviceChange) return;
+                  trigger(() => onAudioOutputDeviceChange(device.deviceId));
+                }}
+                disabled={!onAudioOutputDeviceChange}
+              />
+            );
+          })}
+        </View>
 
         {isLoadingAudioDevices ? (
-          <Text style={styles.audioStatusText}>Loading devices...</Text>
+          <Text style={styles.statusText}>Loading devices...</Text>
         ) : null}
-
         {audioDevicesError ? (
-          <Text style={styles.audioErrorText}>{audioDevicesError}</Text>
+          <Text style={styles.errorText}>{audioDevicesError}</Text>
         ) : null}
-      </View>
+      </ScrollView>
     </TrueSheet>
   );
 }
 
 const styles = StyleSheet.create({
+  scroll: {
+    maxHeight: "100%",
+  },
   sheetContent: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 32,
-    alignItems: "center",
-  },
-  dragHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: SHEET_COLORS.border,
-    opacity: 0.4,
-    alignSelf: "center",
-    marginBottom: 24,
-  },
-  grid: {
-    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingBottom: 16,
     gap: 12,
-    justifyContent: "center",
-    alignSelf: "center",
-    flexWrap: "wrap",
   },
-  audioSection: {
-    width: "100%",
-    marginTop: 18,
-    borderRadius: 16,
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+  },
+  headerText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: SHEET_COLORS.text,
+  },
+  closeButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(254, 252, 217, 0.08)",
     borderWidth: 1,
     borderColor: SHEET_COLORS.border,
-    backgroundColor: SHEET_COLORS.surface,
-    padding: 12,
   },
-  webinarSection: {
+  closeText: {
+    fontSize: 12,
+    color: SHEET_COLORS.text,
+  },
+  sectionLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  sectionLabelText: {
+    fontSize: 11,
+    color: SHEET_COLORS.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
+  listContent: {
+    gap: 8,
+  },
+  row: {
     width: "100%",
-    marginTop: 18,
-    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(254, 252, 217, 0.04)",
     borderWidth: 1,
     borderColor: SHEET_COLORS.border,
-    backgroundColor: SHEET_COLORS.surface,
-    padding: 12,
-    gap: 10,
-  },
-  webinarHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
   },
-  webinarTitleRow: {
+  rowSelected: {
+    borderColor: "rgba(249, 95, 74, 0.75)",
+    backgroundColor: "rgba(249, 95, 74, 0.18)",
+  },
+  rowLeft: {
+    flex: 1,
+    minWidth: 0,
+  },
+  rowRight: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
-  webinarCountPill: {
-    borderWidth: 1,
-    borderColor: "rgba(249, 95, 74, 0.45)",
-    borderRadius: 999,
-    backgroundColor: "rgba(249, 95, 74, 0.2)",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  webinarCountPillText: {
+  rowTitle: {
+    fontSize: 14,
     color: SHEET_COLORS.text,
-    fontSize: 11,
+    flexShrink: 1,
+  },
+  rowTitleSelected: {
     fontWeight: "600",
-    fontVariant: ["tabular-nums"],
   },
-  webinarToggleRow: {
-    flexDirection: "row",
+  rowSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: SHEET_COLORS.textMuted,
+  },
+  rowValue: {
+    fontSize: 12,
+    color: SHEET_COLORS.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  rowDisabled: {
+    opacity: 0.45,
+  },
+  webinarPanel: {
     gap: 8,
-    flexWrap: "wrap",
   },
-  webinarTogglePill: {
-    flex: 1,
-    minWidth: 90,
+  fieldCard: {
+    width: "100%",
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: SHEET_COLORS.border,
-    borderRadius: 999,
-    backgroundColor: "rgba(12, 12, 12, 0.75)",
+    backgroundColor: "rgba(254, 252, 217, 0.04)",
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 2,
+    paddingVertical: 12,
+    gap: 8,
   },
-  webinarTogglePillActive: {
-    borderColor: "rgba(249, 95, 74, 0.82)",
-    backgroundColor: "rgba(249, 95, 74, 0.24)",
-  },
-  webinarTogglePillLock: {
-    borderColor: "rgba(76, 168, 255, 0.82)",
-    backgroundColor: "rgba(76, 168, 255, 0.24)",
-  },
-  webinarTogglePillDisabled: {
-    opacity: 0.48,
-  },
-  webinarTogglePillLabel: {
+  fieldHeaderText: {
     color: SHEET_COLORS.textMuted,
     fontSize: 10,
-    letterSpacing: 1,
     textTransform: "uppercase",
+    letterSpacing: 1.2,
   },
-  webinarTogglePillValue: {
-    color: SHEET_COLORS.textMuted,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-  },
-  webinarTogglePillValueActive: {
-    color: SHEET_COLORS.text,
-  },
-  webinarMetaRow: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  webinarMetaPill: {
-    borderWidth: 1,
-    borderColor: SHEET_COLORS.border,
-    borderRadius: 999,
-    backgroundColor: "rgba(12, 12, 12, 0.72)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  webinarMetaPillActive: {
-    borderColor: "rgba(251, 191, 36, 0.72)",
-    backgroundColor: "rgba(251, 191, 36, 0.2)",
-  },
-  webinarMetaText: {
-    color: SHEET_COLORS.textMuted,
-    fontSize: 11,
-  },
-  webinarMetaTextActive: {
-    color: SHEET_COLORS.text,
-  },
-  webinarRow: {
+  fieldRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
     flexWrap: "wrap",
+    gap: 8,
   },
-  webinarInput: {
+  input: {
     flex: 1,
     minWidth: 140,
     borderWidth: 1,
     borderColor: SHEET_COLORS.border,
     borderRadius: 12,
-    backgroundColor: "rgba(12, 12, 12, 0.75)",
+    backgroundColor: "rgba(254, 252, 217, 0.04)",
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: SHEET_COLORS.text,
     fontSize: 13,
   },
-  webinarButton: {
+  readonlyInput: {
+    opacity: 0.65,
+  },
+  actionButton: {
     borderWidth: 1,
-    borderColor: SHEET_COLORS.border,
     borderRadius: 12,
-    backgroundColor: "rgba(12, 12, 12, 0.75)",
+    minWidth: 72,
     paddingHorizontal: 12,
     paddingVertical: 10,
     alignItems: "center",
     justifyContent: "center",
-    minWidth: 70,
   },
-  webinarButtonPrimary: {
-    borderColor: "rgba(249, 95, 74, 0.82)",
-    backgroundColor: "rgba(249, 95, 74, 0.24)",
+  actionDefault: {
+    borderColor: SHEET_COLORS.border,
+    backgroundColor: "rgba(254, 252, 217, 0.04)",
   },
-  webinarButtonDanger: {
-    borderColor: "rgba(76, 168, 255, 0.72)",
-    backgroundColor: "rgba(76, 168, 255, 0.22)",
+  actionPrimary: {
+    borderColor: "rgba(249, 95, 74, 0.7)",
+    backgroundColor: "rgba(249, 95, 74, 0.2)",
   },
-  webinarButtonText: {
+  actionDanger: {
+    borderColor: "rgba(96, 165, 250, 0.7)",
+    backgroundColor: "rgba(96, 165, 250, 0.2)",
+  },
+  actionButtonText: {
     color: SHEET_COLORS.text,
     fontSize: 12,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
+    fontWeight: "600",
   },
-  webinarNoticeText: {
+  statusText: {
+    marginTop: 4,
+    color: SHEET_COLORS.textMuted,
+    fontSize: 12,
+  },
+  noticeText: {
     color: "rgba(52, 211, 153, 0.95)",
     fontSize: 12,
   },
-  webinarErrorText: {
+  errorText: {
     color: "#F95F4A",
     fontSize: 12,
-  },
-  audioHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 10,
-  },
-  audioHeaderText: {
-    color: SHEET_COLORS.textMuted,
-    fontSize: 11,
-    letterSpacing: 1.4,
-    textTransform: "uppercase",
-  },
-  deviceList: {
-    gap: 8,
-  },
-  devicePlaceholder: {
-    borderWidth: 1,
-    borderColor: SHEET_COLORS.border,
-    borderRadius: 12,
-    backgroundColor: "rgba(12, 12, 12, 0.75)",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  devicePlaceholderText: {
-    color: SHEET_COLORS.textMuted,
-    fontSize: 13,
-  },
-  deviceButton: {
-    borderWidth: 1,
-    borderColor: SHEET_COLORS.border,
-    borderRadius: 12,
-    backgroundColor: "rgba(12, 12, 12, 0.75)",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  deviceButtonSelected: {
-    borderColor: "rgba(249, 95, 74, 0.85)",
-    backgroundColor: "rgba(249, 95, 74, 0.2)",
-  },
-  deviceButtonPressed: {
-    opacity: 0.8,
-    transform: [{ scale: 0.98 }],
-  },
-  deviceButtonLabel: {
-    color: SHEET_COLORS.text,
-    fontSize: 13,
-    flexShrink: 1,
-  },
-  deviceButtonLabelSelected: {
-    color: SHEET_COLORS.text,
-    fontWeight: "600",
-  },
-  audioStatusText: {
-    marginTop: 12,
-    color: SHEET_COLORS.textMuted,
-    fontSize: 12,
-    alignSelf: "flex-start",
-  },
-  audioErrorText: {
-    marginTop: 6,
-    color: "#F95F4A",
-    fontSize: 12,
-    alignSelf: "flex-start",
-  },
-  gridItem: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: SHEET_COLORS.surface,
-    borderWidth: 1,
-    borderColor: SHEET_COLORS.border,
-    position: "relative",
-  },
-  gridItemActive: {
-    backgroundColor: "rgba(249, 95, 74, 0.65)",
-    borderColor: "rgba(249, 95, 74, 0.9)",
-    shadowColor: "rgba(249, 95, 74, 0.6)",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.6,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  gridItemHandActive: {
-    backgroundColor: "rgba(251, 191, 36, 0.65)",
-    borderColor: "rgba(251, 191, 36, 0.9)",
-    shadowColor: "rgba(251, 191, 36, 0.55)",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.6,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  gridItemLockActive: {
-    backgroundColor: "rgba(76, 168, 255, 0.55)",
-    borderColor: "rgba(76, 168, 255, 0.85)",
-    shadowColor: "rgba(76, 168, 255, 0.55)",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.6,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  gridItemPressed: {
-    opacity: 0.7,
-    transform: [{ scale: 0.96 }],
   },
 });
