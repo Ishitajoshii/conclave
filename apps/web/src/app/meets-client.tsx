@@ -40,8 +40,12 @@ import { useMeetTts } from "./hooks/useMeetTts";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { usePrewarmSocket } from "./hooks/usePrewarmSocket";
 import { useSharedBrowser } from "./hooks/useSharedBrowser";
-import { isSystemUserId, sanitizeRoomCode } from "./lib/utils";
 import type { JoinMode } from "./lib/types";
+import {
+  isSystemUserId,
+  sanitizeInstitutionDisplayName,
+  sanitizeRoomCode,
+} from "./lib/utils";
 
 type MeetUser = {
   id?: string;
@@ -313,11 +317,20 @@ export default function MeetsClient({
   const isWebinarAttendee =
     joinMode === "webinar_attendee" || webinarRole === "attendee";
   const ghostEnabled = allowGhostMode && isAdminFlag && isGhostMode;
-  const canSignOut = Boolean(currentUser?.id || currentUser?.email);
+  const canSignOut = Boolean(
+    currentUser && !currentUser.id?.startsWith("guest-"),
+  );
+  const normalizedCurrentUserName =
+    typeof currentUser?.name === "string"
+      ? sanitizeInstitutionDisplayName(currentUser.name, currentUser.email)
+      : currentUser?.name;
 
   const sessionId = refs.sessionIdRef.current;
   const userEmail =
-    currentUser?.name || currentUser?.email || currentUser?.id || "guest";
+    normalizedCurrentUserName ||
+    currentUser?.email ||
+    currentUser?.id ||
+    "guest";
   const userKey = currentUser?.email || currentUser?.id || `guest-${sessionId}`;
   const userId = `${userKey}#${sessionId}`;
 
@@ -360,13 +373,13 @@ export default function MeetsClient({
       id: userId,
       name:
         displayNameInput ||
-        currentUser?.name ||
+        normalizedCurrentUserName ||
         currentUser?.email ||
         currentUser?.id ||
         "Guest",
       email: currentUser?.email ?? null,
     }),
-    [userId, displayNameInput, currentUser],
+    [userId, displayNameInput, normalizedCurrentUserName, currentUser],
   );
 
   const { availableRooms, roomsStatus, refreshRooms } = useMeetRooms({

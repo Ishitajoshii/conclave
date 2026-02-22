@@ -473,6 +473,7 @@ export default function MeetsMainContent({
           )}
           localStream={localStream}
           isCameraOff={isCameraOff}
+          isMuted={isMuted}
           isHandRaised={isHandRaised}
           isGhost={ghostEnabled}
           participants={participants}
@@ -493,6 +494,7 @@ export default function MeetsMainContent({
           presenterName={presenterName}
           localStream={localStream}
           isCameraOff={isCameraOff}
+          isMuted={isMuted}
           isHandRaised={isHandRaised}
           isGhost={ghostEnabled}
           participants={participants}

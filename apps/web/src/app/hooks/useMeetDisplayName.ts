@@ -6,6 +6,7 @@ import {
   formatDisplayName,
   isSystemUserId,
   normalizeDisplayName,
+  sanitizeInstitutionDisplayName,
 } from "../lib/utils";
 import type { JoinMode } from "../lib/types";
 
@@ -67,7 +68,9 @@ export function useMeetDisplayName({
   }, [displayNameInput, currentUserDisplayName]);
 
   useEffect(() => {
-    const baseName = user?.name || user?.email;
+    const baseName = user?.name
+      ? sanitizeInstitutionDisplayName(user.name, user.email)
+      : user?.email;
     if (!baseName) return;
     setDisplayNames((prev) => {
       if (prev.get(userId) === baseName) return prev;
