@@ -146,6 +146,11 @@ const getLiveVideoStream = (stream: MediaStream | null): MediaStream | null => {
   return stream;
 };
 
+const getVideoTrackId = (stream: MediaStream | null): string => {
+  const [track] = stream?.getVideoTracks() ?? [];
+  return track?.id ?? "none";
+};
+
 function MobileMeetsMainContent({
   isJoined,
   connectionState,
@@ -533,6 +538,9 @@ function MobileMeetsMainContent({
             {webinarStage ? (
               <div className="relative h-[66vh] w-full max-w-3xl">
                 <ParticipantVideo
+                  key={`${webinarStage.main.participant.userId}:${getVideoTrackId(
+                    webinarStage.main.participant.videoStream,
+                  )}:${webinarStage.isScreenShare ? "screen" : "camera"}`}
                   participant={webinarStage.main.participant}
                   displayName={webinarStage.main.displayName}
                   isActiveSpeaker={
@@ -544,6 +552,9 @@ function MobileMeetsMainContent({
                 {webinarStage.pip ? (
                   <div className="pointer-events-none absolute bottom-3 right-3 h-24 w-36 overflow-hidden rounded-xl border border-[#FEFCD9]/20 bg-black/75 shadow-[0_12px_24px_rgba(0,0,0,0.45)]">
                     <ParticipantVideo
+                      key={`${webinarStage.pip.participant.userId}:${getVideoTrackId(
+                        webinarStage.pip.participant.videoStream,
+                      )}:pip`}
                       participant={webinarStage.pip.participant}
                       displayName={webinarStage.pip.displayName}
                     />

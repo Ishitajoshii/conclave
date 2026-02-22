@@ -155,6 +155,11 @@ const getLiveVideoStream = (stream: MediaStream | null): MediaStream | null => {
   return stream;
 };
 
+const getVideoTrackId = (stream: MediaStream | null): string => {
+  const [track] = stream?.getVideoTracks() ?? [];
+  return track?.id ?? "none";
+};
+
 export default function MeetsMainContent({
   isJoined,
   connectionState,
@@ -517,6 +522,9 @@ export default function MeetsMainContent({
           {webinarStage ? (
             <div className="relative h-[72vh] w-full max-w-6xl">
               <ParticipantVideo
+                key={`${webinarStage.main.participant.userId}:${getVideoTrackId(
+                  webinarStage.main.participant.videoStream,
+                )}:${webinarStage.isScreenShare ? "screen" : "camera"}`}
                 participant={webinarStage.main.participant}
                 displayName={webinarStage.main.displayName}
                 isActiveSpeaker={
@@ -528,6 +536,9 @@ export default function MeetsMainContent({
               {webinarStage.pip ? (
                 <div className="pointer-events-none absolute bottom-4 right-4 h-28 w-44 overflow-hidden rounded-xl border border-[#FEFCD9]/20 bg-black/75 shadow-[0_16px_36px_rgba(0,0,0,0.5)] sm:h-32 sm:w-56">
                   <ParticipantVideo
+                    key={`${webinarStage.pip.participant.userId}:${getVideoTrackId(
+                      webinarStage.pip.participant.videoStream,
+                    )}:pip`}
                     participant={webinarStage.pip.participant}
                     displayName={webinarStage.pip.displayName}
                   />

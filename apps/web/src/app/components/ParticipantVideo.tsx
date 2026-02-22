@@ -54,22 +54,66 @@ function ParticipantVideo({
       video.srcObject = participant.videoStream;
     }
 
+    let cancelled = false;
+    const replayTimeouts: number[] = [];
+
     const playVideo = () => {
+      if (cancelled) return;
       video.play().catch((err) => {
         if (err.name !== "AbortError") {
+          if (err.name === "NotAllowedError") {
+            video.muted = true;
+            video.play().catch(() => {});
+            return;
+          }
           console.error("[Meets] Video play error:", err);
         }
       });
     };
 
-    playVideo();
+    const scheduleReplay = () => {
+      playVideo();
+      if (typeof window !== "undefined") {
+        replayTimeouts.push(window.setTimeout(playVideo, 80));
+        replayTimeouts.push(window.setTimeout(playVideo, 220));
+      }
+    };
+
+    scheduleReplay();
 
     const videoTrack = participant.videoStream.getVideoTracks()[0];
-    if (!videoTrack) return;
-    videoTrack.addEventListener("unmute", playVideo);
+    const handleTrackUnmuted = () => {
+      scheduleReplay();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        scheduleReplay();
+      }
+    };
+    const handleResize = () => {
+      scheduleReplay();
+    };
+
+    if (videoTrack) {
+      videoTrack.addEventListener("unmute", handleTrackUnmuted);
+    }
+    video.addEventListener("loadedmetadata", scheduleReplay);
+    video.addEventListener("canplay", scheduleReplay);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("resize", handleResize);
 
     return () => {
-      videoTrack.removeEventListener("unmute", playVideo);
+      cancelled = true;
+      if (videoTrack) {
+        videoTrack.removeEventListener("unmute", handleTrackUnmuted);
+      }
+      video.removeEventListener("loadedmetadata", scheduleReplay);
+      video.removeEventListener("canplay", scheduleReplay);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("resize", handleResize);
+      for (const timeoutId of replayTimeouts) {
+        window.clearTimeout(timeoutId);
+      }
     };
   }, [participant.videoStream, participant.videoProducerId, participant.isCameraOff]);
 
@@ -154,6 +198,7 @@ function ParticipantVideo({
       <video
         ref={videoRef}
         autoPlay
+        muted
         playsInline
         className={`w-full h-full ${
           videoObjectFit === "contain" ? "object-contain bg-black" : "object-cover"
