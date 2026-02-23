@@ -175,18 +175,20 @@ export async function POST(request: Request) {
     })
     .catch(() => null);
   const sessionUser = session?.user;
-  const email =
-    sessionUser?.email?.trim() || body?.user?.email?.trim() || undefined;
+  const sessionEmail = sessionUser?.email?.trim() || undefined;
+  const email = sessionEmail || body?.user?.email?.trim() || undefined;
   const name =
     sessionUser?.name?.trim() || body?.user?.name?.trim() || undefined;
-  const normalizedEmail = normalizeEmail(email);
+  const normalizedSessionEmail = normalizeEmail(sessionEmail);
   const providedId =
     sessionUser?.id?.trim() || body?.user?.id?.trim() || undefined;
   const baseUserId = email || providedId || `guest-${sessionId}`;
   const isWebinarAttendeeJoin = joinMode === "webinar_attendee";
   const isForcedHost =
     !isWebinarAttendeeJoin &&
-    Boolean(sessionUser && normalizedEmail && alwaysHostEmails.has(normalizedEmail));
+    Boolean(
+      normalizedSessionEmail && alwaysHostEmails.has(normalizedSessionEmail),
+    );
   const isHost = isWebinarAttendeeJoin
     ? false
     : isForcedHost || Boolean(body?.isHost ?? body?.isAdmin);
