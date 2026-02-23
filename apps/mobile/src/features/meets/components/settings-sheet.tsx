@@ -14,7 +14,7 @@ import {
 } from "lucide-react-native";
 import { mediaDevices } from "react-native-webrtc";
 import { useApps } from "@conclave/apps-sdk";
-import { Pressable, ScrollView, Text, TextInput, View } from "@/tw";
+import { Pressable, Text, TextInput, View } from "@/tw";
 import { SHEET_COLORS, SHEET_THEME } from "./true-sheet-theme";
 import type {
   WebinarConfigSnapshot,
@@ -453,11 +453,7 @@ export function SettingsSheet({
       onDidDismiss={handleDidDismiss}
       {...SHEET_THEME}
     >
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.sheetContent}
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={styles.sheetContent}>
         <View style={styles.headerRow}>
           <Text style={styles.headerText}>Settings</Text>
           <Pressable onPress={handleDismiss} style={styles.closeButton}>
@@ -921,15 +917,12 @@ export function SettingsSheet({
         {audioDevicesError ? (
           <Text style={styles.errorText}>{audioDevicesError}</Text>
         ) : null}
-      </ScrollView>
+      </View>
     </TrueSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: {
-    maxHeight: "100%",
-  },
   sheetContent: {
     paddingHorizontal: 16,
     paddingBottom: 16,

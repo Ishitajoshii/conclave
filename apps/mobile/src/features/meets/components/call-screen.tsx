@@ -481,6 +481,8 @@ export function CallScreen({
   const displayParticipantCount = isObserverMode
     ? webinarConfig?.attendeeCount ?? 0
     : participantCount ?? participantList.length;
+  const isWebinarSession = isObserverMode || Boolean(webinarConfig?.enabled);
+  const webinarTextStyle = isWebinarSession ? styles.webinarRegularText : null;
 
   const stripParticipants = useMemo(() => {
     const list = Array.from(participants.values()).filter(
@@ -632,7 +634,7 @@ export function CallScreen({
           {isObserverMode ? (
             <GlassPill style={styles.pillGlass}>
               <RNView style={styles.roomPill}>
-                <Text style={styles.roomId} numberOfLines={1}>
+                <Text style={[styles.roomId, webinarTextStyle]} numberOfLines={1}>
                   WEBINAR
                 </Text>
               </RNView>
@@ -652,7 +654,11 @@ export function CallScreen({
                     <Lock size={12} color={COLORS.primaryOrange} />
                   ) : null}
                   <Text
-                    style={[styles.roomId, copied && styles.roomIdCopied]}
+                    style={[
+                      styles.roomId,
+                      webinarTextStyle,
+                      copied && styles.roomIdCopied,
+                    ]}
                     numberOfLines={1}
                   >
                     {roomId.toUpperCase()}
@@ -664,35 +670,42 @@ export function CallScreen({
 
         {connectionLabel ? (
           <RNView style={styles.statusPill}>
-            <Text style={styles.statusText}>{connectionLabel}</Text>
+            <Text style={[styles.statusText, webinarTextStyle]}>
+              {connectionLabel}
+            </Text>
           </RNView>
         ) : (
-          isObserverMode ? (
-            <GlassPill style={styles.pillGlass}>
-              <RNView style={styles.participantsPill}>
-                <Users size={12} color={COLORS.cream} />
-                <Text style={styles.participantsCount}>{displayParticipantCount}</Text>
-              </RNView>
-            </GlassPill>
-          ) : !isTablet ? (
-            <GlassPill style={[styles.pillGlass, styles.headerPill]}>
-              <Pressable onPress={onOpenSettings} style={styles.headerPillIconButton}>
-                <Settings size={14} color={COLORS.cream} />
-              </Pressable>
-              <RNView style={styles.headerPillDivider} />
-              <Pressable onPress={onToggleParticipants} style={styles.headerPillButton}>
-                <RNView style={styles.participantsPill}>
-                  <Users size={12} color={COLORS.cream} />
-                  <Text style={styles.participantsCount}>{displayParticipantCount}</Text>
-                </RNView>
-              </Pressable>
-            </GlassPill>
-          ) : (
+          isObserverMode ? null : !isTablet ? (
+            isWebinarSession ? (
+              <GlassPill style={styles.pillGlass}>
+                <Pressable onPress={onOpenSettings} style={styles.headerPillIconButtonOnly}>
+                  <Settings size={14} color={COLORS.cream} />
+                </Pressable>
+              </GlassPill>
+            ) : (
+              <GlassPill style={[styles.pillGlass, styles.headerPill]}>
+                <Pressable onPress={onOpenSettings} style={styles.headerPillIconButton}>
+                  <Settings size={14} color={COLORS.cream} />
+                </Pressable>
+                <RNView style={styles.headerPillDivider} />
+                <Pressable onPress={onToggleParticipants} style={styles.headerPillButton}>
+                  <RNView style={styles.participantsPill}>
+                    <Users size={12} color={COLORS.cream} />
+                    <Text style={[styles.participantsCount, webinarTextStyle]}>
+                      {displayParticipantCount}
+                    </Text>
+                  </RNView>
+                </Pressable>
+              </GlassPill>
+            )
+          ) : isWebinarSession ? null : (
             <Pressable onPress={onToggleParticipants}>
               <GlassPill style={styles.pillGlass}>
                 <RNView style={styles.participantsPill}>
                   <Users size={12} color={COLORS.cream} />
-                  <Text style={styles.participantsCount}>{displayParticipantCount}</Text>
+                  <Text style={[styles.participantsCount, webinarTextStyle]}>
+                    {displayParticipantCount}
+                  </Text>
                 </RNView>
               </GlassPill>
             </Pressable>
@@ -735,7 +748,7 @@ export function CallScreen({
                 />
               ) : (
                 <RNView style={styles.observerFallback}>
-                  <Text style={styles.presenterText}>
+                  <Text style={[styles.presenterText, webinarTextStyle]}>
                     Waiting for the host to start speaking...
                   </Text>
                 </RNView>
@@ -750,7 +763,7 @@ export function CallScreen({
               ) : null}
               {webinarStage ? (
                 <RNView style={styles.presenterBadge}>
-                  <Text style={styles.presenterText}>
+                  <Text style={[styles.presenterText, webinarTextStyle]}>
                     {webinarStage.displayName}
                   </Text>
                 </RNView>
@@ -767,7 +780,7 @@ export function CallScreen({
                     objectFit="cover"
                   />
                   <RNView style={styles.observerPipBadge}>
-                    <Text style={styles.observerPipText}>
+                    <Text style={[styles.observerPipText, webinarTextStyle]}>
                       {webinarStage.pipDisplayName}
                     </Text>
                   </RNView>
@@ -794,7 +807,7 @@ export function CallScreen({
                 objectFit="contain"
               />
               <RNView style={styles.presenterBadge}>
-                <Text style={styles.presenterText}>
+                <Text style={[styles.presenterText, webinarTextStyle]}>
                   {presenterName === "You"
                     ? "You're presenting"
                     : `${presenterName || "Presenter"} is presenting`}
@@ -841,7 +854,10 @@ export function CallScreen({
                     )}
 
                     <RNView style={styles.stripLabel}>
-                      <Text style={styles.stripLabelText} numberOfLines={1}>
+                      <Text
+                        style={[styles.stripLabelText, webinarTextStyle]}
+                        numberOfLines={1}
+                      >
                         {label}
                       </Text>
                       {item.isMuted && (
@@ -909,6 +925,7 @@ export function CallScreen({
         pendingUsersCount={pendingUsersCount}
         unreadCount={unreadCount}
         availableWidth={availableWidth}
+        showParticipantsControl={!isWebinarSession}
         onToggleMute={onToggleMute}
         onToggleCamera={onToggleCamera}
         onToggleScreenShare={onToggleScreenShare}
@@ -1011,6 +1028,10 @@ const styles = StyleSheet.create({
   headerPillIconButton: {
     paddingLeft: 12,
     paddingRight: 8,
+    paddingVertical: 6,
+  },
+  headerPillIconButtonOnly: {
+    paddingHorizontal: 12,
     paddingVertical: 6,
   },
   headerPillDivider: {
@@ -1186,5 +1207,10 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1,
     fontFamily: "PolySans-Mono",
+  },
+  webinarRegularText: {
+    fontFamily: "PolySans-Regular",
+    letterSpacing: 0,
+    textTransform: "none",
   },
 });

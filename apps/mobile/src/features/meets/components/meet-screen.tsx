@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "expo-router";
 import type { Socket } from "socket.io-client";
 import { StatusBar } from "expo-status-bar";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
@@ -102,6 +103,7 @@ export function MeetScreen({
     ensureWebRTCGlobals();
   }
 
+  const router = useRouter();
   const { isTablet } = useDeviceLayout();
   const refs = useMeetRefs();
   const meetingSessionIdRef = useRef(`meet-screen:${refs.sessionIdRef.current}`);
@@ -170,6 +172,7 @@ export function MeetScreen({
   } = useMeetState({ initialRoomId });
   const isWebinarAttendee =
     joinMode === "webinar_attendee" || webinarRole === "attendee";
+  const isWebinarSession = isWebinarAttendee || Boolean(webinarConfig?.enabled);
   const effectiveGhostMode = isGhostMode || isWebinarAttendee;
 
   useEffect(() => {
@@ -869,7 +872,15 @@ export function MeetScreen({
 
   const handleLeave = useCallback(() => {
     exitCurrentMeeting({ playLeaveSound: true });
-  }, [exitCurrentMeeting]);
+    if (hideJoinUI) {
+      router.replace("/");
+    }
+  }, [exitCurrentMeeting, hideJoinUI, router]);
+
+  useEffect(() => {
+    if (!isWebinarSession || !isParticipantsOpen) return;
+    setIsParticipantsOpen(false);
+  }, [isParticipantsOpen, isWebinarSession, setIsParticipantsOpen]);
 
   useEffect(() => {
     const unregister = registerMeetingSession(meetingSessionIdRef.current, {
@@ -1412,6 +1423,7 @@ export function MeetScreen({
           onToggleHandRaised={toggleHandRaised}
           onToggleChat={handleToggleChat}
           onToggleParticipants={() => {
+            if (isWebinarSession) return;
             if (isChatOpen) toggleChat();
             setIsReactionSheetOpen(false);
             setIsSettingsSheetOpen(false);
@@ -1485,7 +1497,7 @@ export function MeetScreen({
         />
       ) : null}
 
-      {isJoined && !isWebinarAttendee ? (
+      {isJoined && !isWebinarSession ? (
         <ParticipantsPanel
           visible={isParticipantsOpen}
           localParticipant={localParticipant}

@@ -59,6 +59,7 @@ interface ControlsBarProps {
   pendingUsersCount: number;
   unreadCount: number;
   availableWidth: number;
+  showParticipantsControl?: boolean;
   isWhiteboardActive?: boolean;
   showWhiteboardControl?: boolean;
   isAppsLocked?: boolean;
@@ -216,6 +217,7 @@ export function ControlsBar({
   pendingUsersCount,
   unreadCount,
   availableWidth,
+  showParticipantsControl = true,
   isWhiteboardActive = false,
   showWhiteboardControl = true,
   isAppsLocked = false,
@@ -329,13 +331,15 @@ export function ControlsBar({
           >
             {!isCompact ? (
               <>
-                <ControlButton
-                  icon={Users}
-                  badge={pendingUsersCount}
-                  size={buttonSize}
-                  iconSize={iconSize}
-                  onPress={onToggleParticipants}
-                />
+                {showParticipantsControl ? (
+                  <ControlButton
+                    icon={Users}
+                    badge={pendingUsersCount}
+                    size={buttonSize}
+                    iconSize={iconSize}
+                    onPress={onToggleParticipants}
+                  />
+                ) : null}
 
                 {isAdmin ? (
                   <ControlButton
@@ -621,8 +625,7 @@ const styles = StyleSheet.create({
   observerLabel: {
     fontSize: 12,
     color: COLORS.creamMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1.8,
-    fontFamily: "PolySans-Mono",
+    letterSpacing: 0.2,
+    fontFamily: "PolySans-Regular",
   },
 });
