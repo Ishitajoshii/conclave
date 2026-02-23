@@ -1,8 +1,7 @@
 "use client";
 
 import { Ghost, Hand, MicOff } from "lucide-react";
-import { memo, useEffect, useRef } from "react";
-import { useSmartParticipantOrder } from "../hooks/useSmartParticipantOrder";
+import { memo, useEffect, useMemo, useRef } from "react";
 import type { Participant } from "../lib/types";
 import { isSystemUserId } from "../lib/utils";
 import ParticipantVideo from "./ParticipantVideo";
@@ -24,6 +23,8 @@ interface GridLayoutProps {
   onParticipantClick?: (userId: string) => void;
   getDisplayName: (userId: string) => string;
 }
+
+const MAX_GRID_TILES = 16;
 
 function GridLayout({
   localStream,
@@ -57,11 +58,71 @@ function GridLayout({
     }
   }, [localStream]);
 
-  const visibleParticipants = useSmartParticipantOrder(
-    Array.from(participants.values()).filter(
-      (participant) => !isSystemUserId(participant.userId)
-    ),
-    activeSpeakerId
+  const remoteParticipants = useMemo(
+    () =>
+      Array.from(participants.values()).filter(
+        (participant) =>
+          !isSystemUserId(participant.userId) &&
+          participant.userId !== currentUserId
+      ),
+    [participants, currentUserId]
+  );
+
+  const maxVisibleRemoteParticipants = Math.max(0, MAX_GRID_TILES - 1);
+  const visibleParticipants = useMemo(() => {
+    if (remoteParticipants.length <= maxVisibleRemoteParticipants) {
+      return remoteParticipants;
+    }
+
+    const selectedIds = new Set<string>();
+    const activeRemoteParticipant =
+      activeSpeakerId
+        ? remoteParticipants.find(
+            (participant) => participant.userId === activeSpeakerId
+          )
+        : null;
+
+    if (activeRemoteParticipant) {
+      selectedIds.add(activeRemoteParticipant.userId);
+    }
+
+    for (const participant of remoteParticipants) {
+      if (selectedIds.size >= maxVisibleRemoteParticipants) {
+        break;
+      }
+      const hasVideo = Boolean(participant.videoStream) && !participant.isCameraOff;
+      if (hasVideo) {
+        selectedIds.add(participant.userId);
+      }
+    }
+
+    const visible: Participant[] = [];
+    for (const participant of remoteParticipants) {
+      if (visible.length >= maxVisibleRemoteParticipants) {
+        break;
+      }
+      if (selectedIds.has(participant.userId)) {
+        visible.push(participant);
+      }
+    }
+
+    if (visible.length < maxVisibleRemoteParticipants) {
+      for (const participant of remoteParticipants) {
+        if (visible.length >= maxVisibleRemoteParticipants) {
+          break;
+        }
+        if (!selectedIds.has(participant.userId)) {
+          visible.push(participant);
+        }
+      }
+    }
+
+    return visible;
+  }, [remoteParticipants, activeSpeakerId, maxVisibleRemoteParticipants]);
+
+  const hiddenParticipantsCount = Math.max(
+    0,
+    remoteParticipants.length - visibleParticipants.length
   );
   const totalParticipants = visibleParticipants.length + 1;
 
@@ -86,7 +147,16 @@ function GridLayout({
     : "";
 
   return (
-    <div className={`flex-1 min-h-0 grid ${gridClass} gap-3 overflow-auto p-4`}>
+    <div className="relative flex-1 min-h-0">
+      {hiddenParticipantsCount > 0 ? (
+        <div
+          className="absolute right-6 top-6 z-10 rounded-full border border-[#FEFCD9]/15 bg-black/55 px-3 py-1 text-[10px] uppercase tracking-wide text-[#FEFCD9]/70"
+          style={{ fontFamily: "'PolySans Mono', monospace" }}
+        >
+          +{hiddenParticipantsCount} more
+        </div>
+      ) : null}
+      <div className={`h-full grid ${gridClass} gap-3 overflow-hidden p-4`}>
       <div
         className={`acm-video-tile ${localSpeakerHighlight}`}
         style={{ fontFamily: "'PolySans Trial', sans-serif" }}
@@ -156,6 +226,7 @@ function GridLayout({
           onAdminClick={onParticipantClick}
         />
       ))}
+      </div>
     </div>
   );
 }
