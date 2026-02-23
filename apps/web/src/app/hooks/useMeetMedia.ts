@@ -168,6 +168,56 @@ export function useMeetMedia({
     }
   }, [getAudioContext]);
 
+  const emitToggleMute = useCallback(
+    (producerId: string, paused: boolean) => {
+      const socket = socketRef.current;
+      if (!socket || !socket.connected) {
+        return Promise.resolve({
+          ok: false,
+          error: "Socket not connected",
+        });
+      }
+
+      return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+        let settled = false;
+        const timeout = window.setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          resolve({ ok: false, error: "toggleMute timeout" });
+        }, 1500);
+
+        socket.emit(
+          "toggleMute",
+          { producerId, paused },
+          (response: { success: boolean } | { error: string }) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timeout);
+            if ("error" in response) {
+              resolve({ ok: false, error: response.error });
+              return;
+            }
+            resolve({ ok: true });
+          }
+        );
+      });
+    },
+    [socketRef]
+  );
+
+  const resetAudioProducer = useCallback(
+    (producer: Producer | null) => {
+      if (!producer) return;
+      try {
+        producer.close();
+      } catch {}
+      if (audioProducerRef.current?.id === producer.id) {
+        audioProducerRef.current = null;
+      }
+    },
+    [audioProducerRef]
+  );
+
   const stopLocalTrack = useCallback(
     (track?: MediaStreamTrack | null) => {
       if (!track) return;
@@ -566,16 +616,16 @@ export function useMeetMedia({
     const nextMuted = !previousMuted;
     let producer = audioProducerRef.current;
 
-    if (producer && producer.track?.readyState !== "live") {
+    if (
+      producer &&
+      (producer.closed || producer.track?.readyState !== "live")
+    ) {
       socketRef.current?.emit(
         "closeProducer",
         { producerId: producer.id },
         () => {}
       );
-      try {
-        producer.close();
-      } catch {}
-      audioProducerRef.current = null;
+      resetAudioProducer(producer);
       producer = null;
     }
 
@@ -589,11 +639,7 @@ export function useMeetMedia({
         try {
           producer.pause();
         } catch {}
-        socketRef.current?.emit(
-          "toggleMute",
-          { producerId: producer.id, paused: true },
-          () => {}
-        );
+        void emitToggleMute(producer.id, true);
       }
       setIsMuted(true);
       return;
@@ -654,12 +700,18 @@ export function useMeetMedia({
         try {
           producer.resume();
         } catch {}
-        socketRef.current?.emit(
-          "toggleMute",
-          { producerId: producer.id, paused: false },
-          () => {}
-        );
-      } else {
+        const toggleResult = await emitToggleMute(producer.id, false);
+        if (!toggleResult.ok) {
+          console.warn(
+            "[Meets] toggleMute failed, restarting audio producer:",
+            toggleResult.error
+          );
+          resetAudioProducer(producer);
+          producer = null;
+        }
+      }
+
+      if (!producer) {
         const audioProducer = await transport.produce({
           track: audioTrack,
           codecOptions: {
@@ -704,6 +756,7 @@ export function useMeetMedia({
     stopLocalTrack,
     buildAudioConstraints,
     socketRef,
+    emitToggleMute,
     audioProducerRef,
     localStreamRef,
     setLocalStream,
@@ -711,13 +764,24 @@ export function useMeetMedia({
     setIsMuted,
     setMeetError,
     OPUS_MAX_AVERAGE_BITRATE,
+    resetAudioProducer,
   ]);
 
   useEffect(() => {
     if (ghostEnabled || isObserverMode) return;
     if (connectionState !== "joined") return;
     if (isMuted) return;
-    if (audioProducerRef.current) return;
+    if (audioProducerRef.current) {
+      const existingProducer = audioProducerRef.current;
+      if (
+        existingProducer.closed ||
+        existingProducer.track?.readyState !== "live"
+      ) {
+        resetAudioProducer(existingProducer);
+      } else {
+        return;
+      }
+    }
     if (audioRecoveryInFlightRef.current) return;
 
     const transport = producerTransportRef.current;
@@ -829,6 +893,7 @@ export function useMeetMedia({
     setIsMuted,
     setMeetError,
     OPUS_MAX_AVERAGE_BITRATE,
+    resetAudioProducer,
   ]);
 
   const toggleCamera = useCallback(async () => {
