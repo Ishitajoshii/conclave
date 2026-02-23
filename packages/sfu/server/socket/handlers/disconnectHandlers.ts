@@ -18,8 +18,10 @@ const promoteNextAdmin = (room: Room): Admin | null => {
     if (client instanceof Admin || client.isGhost || client.isWebinarAttendee) {
       continue;
     }
-    Object.setPrototypeOf(client, Admin.prototype);
-    return client as Admin;
+    const promoted = room.promoteClientToAdmin(client.id);
+    if (promoted) {
+      return promoted;
+    }
   }
   return null;
 };
@@ -175,6 +177,10 @@ export const registerDisconnectHandlers = (
           io.to(roomChannelId).emit("hostChanged", {
             roomId,
             hostUserId: activeRoom.getHostUserId(),
+          });
+          io.to(roomChannelId).emit("adminUsersChanged", {
+            roomId,
+            hostUserIds: activeRoom.getAdminUserIds(),
           });
         }
 

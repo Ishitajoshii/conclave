@@ -110,6 +110,84 @@ export const registerAdminHandlers = (
     respond(cb, { success: true, count });
   });
 
+  socket.on("promoteHost", ({ userId: targetId }: { userId: string }, cb) => {
+    if (!context.currentRoom || !context.currentClient) {
+      respond(cb, { error: "Room not found" });
+      return;
+    }
+
+    const currentRoom = context.currentRoom;
+    const isActiveAdmin = context.currentClient instanceof Admin;
+    const hasPersistedAdminRole = Boolean(
+      context.currentUserKey && currentRoom.isAdminUserKey(context.currentUserKey),
+    );
+    if (!isActiveAdmin && !hasPersistedAdminRole) {
+      respond(cb, { error: "Only hosts can promote another host." });
+      return;
+    }
+
+    const targetClient = currentRoom.getClient(targetId);
+    if (!targetClient) {
+      respond(cb, { error: "User not found" });
+      return;
+    }
+    if (targetClient.isGhost || targetClient.isWebinarAttendee) {
+      respond(cb, { error: "User cannot be promoted to host." });
+      return;
+    }
+
+    const targetUserKey = currentRoom.userKeysById.get(targetId);
+    if (!targetUserKey) {
+      respond(cb, { error: "User identity not found" });
+      return;
+    }
+
+    const alreadyAdmin = targetClient instanceof Admin;
+    const promoted = currentRoom.promoteClientToAdmin(targetId);
+    if (!promoted) {
+      respond(cb, { error: "Failed to promote user" });
+      return;
+    }
+
+    const promotedContext = (promoted.socket as any).data?.context as
+      | ConnectionContext
+      | undefined;
+    if (!alreadyAdmin && promotedContext) {
+      promotedContext.currentClient = promoted;
+      promotedContext.currentRoom = currentRoom;
+      registerAdminHandlers(promotedContext, { roomId: currentRoom.id });
+      const pendingUsers = Array.from(currentRoom.pendingClients.values()).map(
+        (pending) => ({
+          userId: pending.userKey,
+          displayName: pending.displayName || pending.userKey,
+        }),
+      );
+      promoted.socket.emit("pendingUsersSnapshot", {
+        users: pendingUsers,
+        roomId: currentRoom.id,
+      });
+    }
+
+    promoted.socket.emit("hostAssigned", {
+      roomId: currentRoom.id,
+      hostUserId: currentRoom.getHostUserId() ?? promoted.id,
+    });
+
+    context.io.to(currentRoom.channelId).emit("adminUsersChanged", {
+      roomId: currentRoom.id,
+      hostUserIds: currentRoom.getAdminUserIds(),
+    });
+
+    Logger.info(
+      `Host privileges granted in room ${currentRoom.id}: ${context.currentClient.id} -> ${promoted.id}`,
+    );
+    respond(cb, {
+      success: true,
+      hostUserId: currentRoom.getHostUserId() ?? null,
+      hostUserIds: currentRoom.getAdminUserIds(),
+    });
+  });
+
   socket.on("getRooms", (cb) => {
     const clientId =
       typeof (socket as any).user?.clientId === "string"
