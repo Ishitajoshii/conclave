@@ -1,7 +1,7 @@
 "use client";
 
-import { Ghost, Hand, MicOff, X } from "lucide-react";
-import { memo } from "react";
+import { Crown, Ghost, Hand, MicOff, X } from "lucide-react";
+import { memo, useState } from "react";
 import type { Socket } from "socket.io-client";
 import type { Participant } from "../../lib/types";
 import { isSystemUserId, truncateDisplayName } from "../../lib/utils";
@@ -15,6 +15,7 @@ interface MobileParticipantsPanelProps {
   pendingUsers: Map<string, string>;
   getDisplayName: (userId: string) => string;
   hostUserId?: string | null;
+  hostUserIds?: string[];
 }
 
 function MobileParticipantsPanel({
@@ -26,12 +27,25 @@ function MobileParticipantsPanel({
   pendingUsers,
   getDisplayName,
   hostUserId,
+  hostUserIds,
 }: MobileParticipantsPanelProps) {
   const participantArray = Array.from(participants.values()).filter(
     (participant) => !isSystemUserId(participant.userId),
   );
   const pendingArray = Array.from(pendingUsers.entries());
   const effectiveHostUserId = hostUserId ?? (isAdmin ? currentUserId : null);
+  const effectiveHostUserIds = new Set<string>(
+    hostUserIds && hostUserIds.length > 0
+      ? hostUserIds
+      : effectiveHostUserId
+        ? [effectiveHostUserId]
+        : [],
+  );
+  const canManageHost = Boolean(isAdmin);
+  const [promotingHostUserId, setPromotingHostUserId] = useState<string | null>(
+    null,
+  );
+  const [hostActionError, setHostActionError] = useState<string | null>(null);
   const formatName = (value: string, maxLength = 18) =>
     truncateDisplayName(value, maxLength);
 
@@ -41,6 +55,32 @@ function MobileParticipantsPanel({
 
   const handleReject = (userId: string) => {
     socket?.emit("rejectUser", { userId });
+  };
+
+  const handlePromoteHost = (targetUserId: string) => {
+    if (!socket || !canManageHost || effectiveHostUserIds.has(targetUserId)) {
+      return;
+    }
+    if (
+      !window.confirm(
+        "Add host privileges for this participant?",
+      )
+    ) {
+      return;
+    }
+
+    setHostActionError(null);
+    setPromotingHostUserId(targetUserId);
+    socket.emit(
+      "promoteHost",
+      { userId: targetUserId },
+      (res: { success?: boolean; hostUserId?: string; error?: string }) => {
+        setPromotingHostUserId(null);
+        if (res.error || !res.success) {
+          setHostActionError(res.error || "Failed to promote host.");
+        }
+      },
+    );
   };
 
   return (
@@ -107,6 +147,11 @@ function MobileParticipantsPanel({
 
         {/* In meeting section */}
         <div className="px-4 py-3">
+          {hostActionError && (
+            <div className="mb-3 text-[11px] px-2.5 py-1.5 rounded-lg bg-red-500/10 text-red-300 border border-red-500/20">
+              {hostActionError}
+            </div>
+          )}
           <p className="text-[10px] text-[#FEFCD9]/40 uppercase tracking-widest mb-3">
             In meeting
           </p>
@@ -124,7 +169,7 @@ function MobileParticipantsPanel({
                   <span className="text-[9px] text-[#F95F4A]/60 uppercase">
                     (You)
                   </span>
-                  {effectiveHostUserId === currentUserId && (
+                  {effectiveHostUserIds.has(currentUserId) && (
                     <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-300/30 bg-amber-400/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-amber-200">
                       Host
                     </span>
@@ -153,7 +198,7 @@ function MobileParticipantsPanel({
                     <span className="text-sm text-[#FEFCD9] truncate block">
                       {formatName(getDisplayName(participant.userId), 16)}
                     </span>
-                    {effectiveHostUserId === participant.userId && (
+                    {effectiveHostUserIds.has(participant.userId) && (
                       <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-300/30 bg-amber-400/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-amber-200">
                         Host
                       </span>
@@ -161,6 +206,24 @@ function MobileParticipantsPanel({
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  {canManageHost &&
+                    !effectiveHostUserIds.has(participant.userId) &&
+                    !participant.isGhost && (
+                      <button
+                        onClick={() => handlePromoteHost(participant.userId)}
+                        disabled={promotingHostUserId === participant.userId}
+                        className="px-2 py-1 text-[10px] text-amber-200 border border-amber-300/30 rounded-md disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {promotingHostUserId === participant.userId ? (
+                          "Promoting..."
+                        ) : (
+                          <span className="inline-flex items-center gap-1">
+                            <Crown className="w-3 h-3" />
+                            Host
+                          </span>
+                        )}
+                      </button>
+                    )}
                   {participant.isHandRaised && (
                     <Hand className="w-4 h-4 text-amber-400" />
                   )}

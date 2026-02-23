@@ -4,6 +4,7 @@ import {
   AlertCircle,
   ArrowRight,
   ChevronDown,
+  Crown,
   Hand,
   Mic,
   MicOff,
@@ -38,6 +39,7 @@ interface ParticipantsPanelProps {
     isScreenSharing: boolean;
   };
   hostUserId?: string | null;
+  hostUserIds?: string[];
 }
 
 function ParticipantsPanel({
@@ -53,6 +55,7 @@ function ParticipantsPanel({
   getRooms,
   localState,
   hostUserId,
+  hostUserIds,
 }: ParticipantsPanelProps & {
   socket: Socket | null;
   isAdmin?: boolean | null;
@@ -87,8 +90,20 @@ function ParticipantsPanel({
     string | null
   >(null);
   const [isPendingExpanded, setIsPendingExpanded] = useState(true);
+  const [promotingHostUserId, setPromotingHostUserId] = useState<string | null>(
+    null,
+  );
+  const [hostActionError, setHostActionError] = useState<string | null>(null);
   const filteredRooms = availableRooms.filter((room) => room.id !== roomId);
   const effectiveHostUserId = hostUserId ?? (isAdmin ? currentUserId : null);
+  const effectiveHostUserIds = new Set<string>(
+    hostUserIds && hostUserIds.length > 0
+      ? hostUserIds
+      : effectiveHostUserId
+        ? [effectiveHostUserId]
+        : [],
+  );
+  const canManageHost = Boolean(isAdmin);
 
   const getEmailFromUserId = (userId: string): string => {
     return userId.split("#")[0] || userId;
@@ -140,6 +155,32 @@ function ParticipantsPanel({
     );
   };
 
+  const handlePromoteHost = (targetUserId: string) => {
+    if (!socket || !canManageHost || effectiveHostUserIds.has(targetUserId)) {
+      return;
+    }
+    if (
+      !window.confirm(
+        "Add host privileges for this participant?",
+      )
+    ) {
+      return;
+    }
+
+    setHostActionError(null);
+    setPromotingHostUserId(targetUserId);
+    socket.emit(
+      "promoteHost",
+      { userId: targetUserId },
+      (res: { success?: boolean; hostUserId?: string; error?: string }) => {
+        setPromotingHostUserId(null);
+        if (res.error || !res.success) {
+          setHostActionError(res.error || "Failed to promote host.");
+        }
+      },
+    );
+  };
+
   return (
     <div
       className="fixed right-4 top-16 bottom-20 w-72 bg-[#0d0e0d]/95 backdrop-blur-md border border-[#FEFCD9]/10 rounded-xl flex flex-col z-40 shadow-2xl overflow-hidden"
@@ -164,6 +205,11 @@ function ParticipantsPanel({
 
       {isAdmin && (
         <div className="px-3 py-2 flex flex-col gap-2 border-b border-[#FEFCD9]/5">
+          {hostActionError && (
+            <div className="text-[10px] px-2 py-1 rounded bg-red-500/10 text-red-300 border border-red-500/20">
+              {hostActionError}
+            </div>
+          )}
           <div className="flex gap-1.5">
             <button
               onClick={() =>
@@ -266,9 +312,7 @@ function ParticipantsPanel({
       <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-0.5">
         {displayParticipants.map((p) => {
           const isMe = p.userId === currentUserId;
-          const isHost = Boolean(
-            effectiveHostUserId && p.userId === effectiveHostUserId,
-          );
+          const isHost = effectiveHostUserIds.has(p.userId);
           const displayName = getDisplayName(p.userId);
           const userEmail = getEmailFromUserId(p.userId);
           const hasScreenShare =
@@ -311,6 +355,20 @@ function ParticipantsPanel({
                 )}
                 {isAdmin && !isMe && (
                   <>
+                    {canManageHost && !isHost && (
+                      <button
+                        onClick={() => handlePromoteHost(p.userId)}
+                        disabled={promotingHostUserId === p.userId}
+                        className="p-0.5 text-amber-300/70 hover:text-amber-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        title={
+                          promotingHostUserId === p.userId
+                            ? "Promoting..."
+                            : "Add as host"
+                        }
+                      >
+                        <Crown className="w-2.5 h-2.5" />
+                      </button>
+                    )}
                     {p.videoProducerId && !p.isCameraOff && (
                       <button
                         onClick={() => handleCloseProducer(p.videoProducerId!)}

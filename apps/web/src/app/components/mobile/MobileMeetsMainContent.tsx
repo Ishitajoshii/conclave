@@ -125,6 +125,7 @@ interface MobileMeetsMainContentProps {
   onRetryMedia?: () => void;
   onTestSpeaker?: () => void;
   hostUserId: string | null;
+  hostUserIds: string[];
   isNetworkOffline: boolean;
   serverRestartNotice?: string | null;
   isTtsDisabled: boolean;
@@ -271,6 +272,7 @@ function MobileMeetsMainContent({
   onRetryMedia,
   onTestSpeaker,
   hostUserId,
+  hostUserIds,
   isNetworkOffline,
   serverRestartNotice = null,
   isTtsDisabled,
@@ -966,6 +968,7 @@ function MobileMeetsMainContent({
           pendingUsers={pendingUsers}
           getDisplayName={resolveDisplayName}
           hostUserId={hostUserId}
+          hostUserIds={hostUserIds}
         />
       )}
     </div>

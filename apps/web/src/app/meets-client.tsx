@@ -235,6 +235,8 @@ export default function MeetsClient({
     setIsBrowserAudioMuted,
     hostUserId,
     setHostUserId,
+    hostUserIds,
+    setHostUserIds,
     isNetworkOffline,
     setIsNetworkOffline,
     meetingRequiresInviteCode,
@@ -690,6 +692,7 @@ export default function MeetsClient({
     setMeetError,
     setWaitingMessage,
     setHostUserId,
+    setHostUserIds,
     setServerRestartNotice,
     setWebinarConfig,
     setWebinarRole,
@@ -1163,6 +1166,7 @@ export default function MeetsClient({
           onRetryMedia={handleRetryMedia}
           onTestSpeaker={handleTestSpeaker}
           hostUserId={hostUserId}
+          hostUserIds={hostUserIds}
           isNetworkOffline={isNetworkOffline}
           serverRestartNotice={serverRestartNotice}
           meetingRequiresInviteCode={meetingRequiresInviteCode}
@@ -1328,6 +1332,7 @@ export default function MeetsClient({
         onOpenPopout={openPopout}
         onClosePopout={closePopout}
         hostUserId={hostUserId}
+        hostUserIds={hostUserIds}
         isNetworkOffline={isNetworkOffline}
         serverRestartNotice={serverRestartNotice}
         meetingRequiresInviteCode={meetingRequiresInviteCode}

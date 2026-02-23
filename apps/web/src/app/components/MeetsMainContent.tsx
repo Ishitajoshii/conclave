@@ -134,6 +134,7 @@ interface MeetsMainContentProps {
   onOpenPopout?: () => void;
   onClosePopout?: () => void;
   hostUserId: string | null;
+  hostUserIds: string[];
   isNetworkOffline: boolean;
   serverRestartNotice?: string | null;
   isTtsDisabled: boolean;
@@ -286,6 +287,7 @@ export default function MeetsMainContent({
   onOpenPopout,
   onClosePopout,
   hostUserId,
+  hostUserIds,
   isNetworkOffline,
   serverRestartNotice = null,
   isTtsDisabled,
@@ -1033,6 +1035,7 @@ export default function MeetsMainContent({
           getDisplayName={resolveDisplayName}
           onPendingUserStale={handlePendingUserStale}
           hostUserId={hostUserId}
+          hostUserIds={hostUserIds}
         />
       )}
 

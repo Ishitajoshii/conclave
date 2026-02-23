@@ -43,6 +43,7 @@ export function useMeetState({ initialRoomId }: UseMeetStateOptions) {
   const [isTtsDisabled, setIsTtsDisabled] = useState(false);
   const [isBrowserAudioMuted, setIsBrowserAudioMuted] = useState(false);
   const [hostUserId, setHostUserId] = useState<string | null>(null);
+  const [hostUserIds, setHostUserIds] = useState<string[]>([]);
   const [isNetworkOffline, setIsNetworkOffline] = useState(false);
   const [meetingRequiresInviteCode, setMeetingRequiresInviteCode] =
     useState(false);
@@ -102,6 +103,8 @@ export function useMeetState({ initialRoomId }: UseMeetStateOptions) {
     setIsBrowserAudioMuted,
     hostUserId,
     setHostUserId,
+    hostUserIds,
+    setHostUserIds,
     isNetworkOffline,
     setIsNetworkOffline,
     meetingRequiresInviteCode,
