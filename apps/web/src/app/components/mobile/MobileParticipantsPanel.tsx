@@ -3,6 +3,7 @@
 import { Crown, Ghost, Hand, MicOff, X } from "lucide-react";
 import { memo, useState } from "react";
 import type { Socket } from "socket.io-client";
+import HostPromotionDialog from "../HostPromotionDialog";
 import type { Participant } from "../../lib/types";
 import { isSystemUserId, truncateDisplayName } from "../../lib/utils";
 
@@ -45,6 +46,9 @@ function MobileParticipantsPanel({
   const [promotingHostUserId, setPromotingHostUserId] = useState<string | null>(
     null,
   );
+  const [pendingHostPromotionUserId, setPendingHostPromotionUserId] = useState<
+    string | null
+  >(null);
   const [hostActionError, setHostActionError] = useState<string | null>(null);
   const formatName = (value: string, maxLength = 18) =>
     truncateDisplayName(value, maxLength);
@@ -61,13 +65,6 @@ function MobileParticipantsPanel({
     if (!socket || !canManageHost || effectiveHostUserIds.has(targetUserId)) {
       return;
     }
-    if (
-      !window.confirm(
-        "Add host privileges for this participant?",
-      )
-    ) {
-      return;
-    }
 
     setHostActionError(null);
     setPromotingHostUserId(targetUserId);
@@ -76,11 +73,23 @@ function MobileParticipantsPanel({
       { userId: targetUserId },
       (res: { success?: boolean; hostUserId?: string; error?: string }) => {
         setPromotingHostUserId(null);
+        setPendingHostPromotionUserId(null);
         if (res.error || !res.success) {
           setHostActionError(res.error || "Failed to promote host.");
         }
       },
     );
+  };
+
+  const openPromoteHostDialog = (targetUserId: string) => {
+    if (!canManageHost || effectiveHostUserIds.has(targetUserId)) return;
+    setHostActionError(null);
+    setPendingHostPromotionUserId(targetUserId);
+  };
+
+  const closePromoteHostDialog = () => {
+    if (promotingHostUserId) return;
+    setPendingHostPromotionUserId(null);
   };
 
   return (
@@ -210,7 +219,7 @@ function MobileParticipantsPanel({
                     !effectiveHostUserIds.has(participant.userId) &&
                     !participant.isGhost && (
                       <button
-                        onClick={() => handlePromoteHost(participant.userId)}
+                        onClick={() => openPromoteHostDialog(participant.userId)}
                         disabled={promotingHostUserId === participant.userId}
                         className="px-2 py-1 text-[10px] text-amber-200 border border-amber-300/30 rounded-md disabled:opacity-40 disabled:cursor-not-allowed"
                       >
@@ -236,6 +245,25 @@ function MobileParticipantsPanel({
           </div>
         </div>
       </div>
+
+      <HostPromotionDialog
+        isOpen={Boolean(pendingHostPromotionUserId)}
+        targetName={
+          pendingHostPromotionUserId
+            ? formatName(getDisplayName(pendingHostPromotionUserId), 24)
+            : ""
+        }
+        isSubmitting={Boolean(
+          promotingHostUserId &&
+            pendingHostPromotionUserId &&
+            promotingHostUserId === pendingHostPromotionUserId,
+        )}
+        onCancel={closePromoteHostDialog}
+        onConfirm={() => {
+          if (!pendingHostPromotionUserId) return;
+          handlePromoteHost(pendingHostPromotionUserId);
+        }}
+      />
     </div>
   );
 }

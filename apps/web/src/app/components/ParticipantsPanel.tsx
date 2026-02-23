@@ -18,6 +18,7 @@ import {
 import { memo, useState } from "react";
 import type { Socket } from "socket.io-client";
 import type { RoomInfo } from "@/lib/sfu-types";
+import HostPromotionDialog from "./HostPromotionDialog";
 import type { Participant } from "../lib/types";
 import { formatDisplayName, isSystemUserId } from "../lib/utils";
 
@@ -95,6 +96,9 @@ function ParticipantsPanel({
   const [promotingHostUserId, setPromotingHostUserId] = useState<string | null>(
     null,
   );
+  const [pendingHostPromotionUserId, setPendingHostPromotionUserId] = useState<
+    string | null
+  >(null);
   const [hostActionError, setHostActionError] = useState<string | null>(null);
   const filteredRooms = availableRooms.filter((room) => room.id !== roomId);
   const effectiveHostUserId = hostUserId ?? (isAdmin ? currentUserId : null);
@@ -180,14 +184,6 @@ function ParticipantsPanel({
     ) {
       return;
     }
-    if (
-      !window.confirm(
-        "Add host privileges for this participant?",
-      )
-    ) {
-      return;
-    }
-
     setHostActionError(null);
     setPromotingHostUserId(targetUserId);
     socket.emit(
@@ -195,11 +191,23 @@ function ParticipantsPanel({
       { userId: targetUserId },
       (res: { success?: boolean; hostUserId?: string; error?: string }) => {
         setPromotingHostUserId(null);
+        setPendingHostPromotionUserId(null);
         if (res.error || !res.success) {
           setHostActionError(res.error || "Failed to promote host.");
         }
       },
     );
+  };
+
+  const openPromoteHostDialog = (targetUserId: string) => {
+    if (!canManageHost || effectiveHostUserIds.has(targetUserId)) return;
+    setHostActionError(null);
+    setPendingHostPromotionUserId(targetUserId);
+  };
+
+  const closePromoteHostDialog = () => {
+    if (promotingHostUserId) return;
+    setPendingHostPromotionUserId(null);
   };
 
   return (
@@ -401,7 +409,7 @@ function ParticipantsPanel({
                   <>
                     {canPromoteParticipant && (
                       <button
-                        onClick={() => handlePromoteHost(participant.userId)}
+                        onClick={() => openPromoteHostDialog(participant.userId)}
                         disabled={promotingHostUserId === participant.userId}
                         className="p-0.5 text-amber-300/70 hover:text-amber-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         title={
@@ -506,6 +514,25 @@ function ParticipantsPanel({
           </div>
         </div>
       )}
+
+      <HostPromotionDialog
+        isOpen={Boolean(pendingHostPromotionUserId)}
+        targetName={
+          pendingHostPromotionUserId
+            ? formatDisplayName(getDisplayName(pendingHostPromotionUserId))
+            : ""
+        }
+        isSubmitting={Boolean(
+          promotingHostUserId &&
+            pendingHostPromotionUserId &&
+            promotingHostUserId === pendingHostPromotionUserId,
+        )}
+        onCancel={closePromoteHostDialog}
+        onConfirm={() => {
+          if (!pendingHostPromotionUserId) return;
+          handlePromoteHost(pendingHostPromotionUserId);
+        }}
+      />
     </div>
   );
 }
