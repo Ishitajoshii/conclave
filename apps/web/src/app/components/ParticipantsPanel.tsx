@@ -9,11 +9,11 @@ import {
   Mic,
   MicOff,
   Monitor,
+  UserMinus,
   Users,
   Video,
   VideoOff,
   X,
-  UserMinus,
 } from "lucide-react";
 import { memo, useState } from "react";
 import type { Socket } from "socket.io-client";
@@ -71,9 +71,11 @@ function ParticipantsPanel({
           videoStream: null,
           audioStream: null,
           screenShareStream: null,
+          screenShareAudioStream: null,
           audioProducerId: null,
           videoProducerId: null,
           screenShareProducerId: null,
+          screenShareAudioProducerId: null,
           isMuted: localState.isMuted,
           isCameraOff: localState.isCameraOff,
           isHandRaised: localState.isHandRaised,
@@ -104,6 +106,11 @@ function ParticipantsPanel({
         : [],
   );
   const canManageHost = Boolean(isAdmin);
+
+  const hostBulkButtonClass =
+    "flex-1 rounded-md border border-[#FEFCD9]/15 bg-[#FEFCD9]/5 py-1.5 text-[10px] uppercase tracking-[0.08em] text-[#FEFCD9]/75 transition-all hover:border-[#F95F4A]/45 hover:bg-[#F95F4A]/10 hover:text-[#FEFCD9]";
+  const hostUserActionButtonClass =
+    "inline-flex h-6 w-6 items-center justify-center rounded-md border border-[#FEFCD9]/15 bg-[#FEFCD9]/5 text-[#FEFCD9]/60 transition-colors";
 
   const getEmailFromUserId = (userId: string): string => {
     return userId.split("#")[0] || userId;
@@ -183,30 +190,35 @@ function ParticipantsPanel({
 
   return (
     <div
-      className="fixed right-4 top-16 bottom-20 w-72 bg-[#0d0e0d]/95 backdrop-blur-md border border-[#FEFCD9]/10 rounded-xl flex flex-col z-40 shadow-2xl overflow-hidden"
+      className="fixed right-4 top-16 bottom-20 z-40 flex w-72 flex-col overflow-hidden rounded-xl border border-[#FEFCD9]/10 bg-[#0d0e0d]/95 shadow-2xl backdrop-blur-md"
       style={{ fontFamily: "'PolySans Trial', sans-serif" }}
     >
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-[#FEFCD9]/10">
+      <div className="flex items-center justify-between border-b border-[#FEFCD9]/10 px-3 py-2.5">
         <span
-          className="text-[10px] uppercase tracking-[0.12em] text-[#FEFCD9]/60 flex items-center gap-1.5"
+          className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.12em] text-[#FEFCD9]/70"
           style={{ fontFamily: "'PolySans Mono', monospace" }}
         >
-          <Users className="w-3.5 h-3.5" />
+          <Users className="h-3.5 w-3.5" />
           Participants
           <span className="text-[#F95F4A]">({displayParticipants.length})</span>
         </span>
         <button
           onClick={onClose}
-          className="w-6 h-6 rounded flex items-center justify-center text-[#FEFCD9]/50 hover:text-[#FEFCD9] hover:bg-[#FEFCD9]/10 transition-all"
+          className="flex h-6 w-6 items-center justify-center rounded text-[#FEFCD9]/50 transition-all hover:bg-[#FEFCD9]/10 hover:text-[#FEFCD9]"
+          aria-label="Close participants panel"
         >
-          <X className="w-3.5 h-3.5" />
+          <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
       {isAdmin && (
-        <div className="px-3 py-2 flex flex-col gap-2 border-b border-[#FEFCD9]/5">
+        <div className="border-b border-[#FEFCD9]/5 px-3 py-2">
+          <div className="mb-1.5 flex items-center gap-1 text-[9px] uppercase tracking-[0.1em] text-[#FEFCD9]/45">
+            <AlertCircle className="h-3 w-3" />
+            Host controls
+          </div>
           {hostActionError && (
-            <div className="text-[10px] px-2 py-1 rounded bg-red-500/10 text-red-300 border border-red-500/20">
+            <div className="mb-2 rounded border border-red-500/20 bg-red-500/10 px-2 py-1 text-[10px] text-red-300">
               {hostActionError}
             </div>
           )}
@@ -217,11 +229,13 @@ function ParticipantsPanel({
                   console.log("Muted all:", res),
                 )
               }
-              className="flex-1 text-[9px] py-1.5 rounded-md flex items-center justify-center gap-1 text-[#FEFCD9]/60 hover:text-[#F95F4A] hover:bg-[#F95F4A]/10 transition-all uppercase tracking-wider"
+              className={hostBulkButtonClass}
               title="Mute all"
             >
-              <MicOff className="w-3 h-3" />
-              Mute
+              <span className="inline-flex items-center justify-center gap-1">
+                <MicOff className="h-3.5 w-3.5" />
+                Mute all
+              </span>
             </button>
             <button
               onClick={() =>
@@ -229,11 +243,13 @@ function ParticipantsPanel({
                   console.log("Stopped all video:", res),
                 )
               }
-              className="flex-1 text-[9px] py-1.5 rounded-md flex items-center justify-center gap-1 text-[#FEFCD9]/60 hover:text-[#F95F4A] hover:bg-[#F95F4A]/10 transition-all uppercase tracking-wider"
+              className={hostBulkButtonClass}
               title="Stop all video"
             >
-              <VideoOff className="w-3 h-3" />
-              Video
+              <span className="inline-flex items-center justify-center gap-1">
+                <VideoOff className="h-3.5 w-3.5" />
+                Stop video
+              </span>
             </button>
           </div>
         </div>
@@ -244,34 +260,34 @@ function ParticipantsPanel({
           <button
             type="button"
             onClick={() => setIsPendingExpanded((prev) => !prev)}
-            className="w-full px-3 py-2 flex items-center justify-between hover:bg-[#F95F4A]/5 transition-colors"
+            className="flex w-full items-center justify-between px-3 py-2 transition-colors hover:bg-[#F95F4A]/5"
             aria-expanded={isPendingExpanded}
           >
-            <span className="text-[10px] text-[#F95F4A] uppercase tracking-wider flex items-center gap-1.5">
+            <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-[#F95F4A]">
               Pending
-              <span className="px-1.5 py-0.5 rounded bg-[#F95F4A]/20 text-[9px] tabular-nums">
+              <span className="rounded bg-[#F95F4A]/20 px-1.5 py-0.5 text-[9px] tabular-nums">
                 {pendingList.length}
               </span>
             </span>
             <ChevronDown
-              className={`w-3 h-3 text-[#F95F4A] transition-transform ${
+              className={`h-3 w-3 text-[#F95F4A] transition-transform ${
                 isPendingExpanded ? "rotate-180" : ""
               }`}
             />
           </button>
           {isPendingExpanded && (
-            <div className="px-3 pb-2 space-y-1 max-h-32 overflow-y-auto">
+            <div className="max-h-32 space-y-1 overflow-y-auto px-3 pb-2">
               {pendingList.map(([userId, displayName]) => {
                 const pendingName = formatDisplayName(displayName || userId);
                 return (
                   <div
                     key={userId}
-                    className="flex items-center justify-between py-1.5 px-2 rounded-md bg-black/30"
+                    className="flex items-center justify-between rounded-md bg-black/30 px-2 py-1.5"
                   >
-                    <span className="text-xs text-[#FEFCD9]/70 truncate flex-1">
+                    <span className="flex-1 truncate text-xs text-[#FEFCD9]/70">
                       {pendingName}
                     </span>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex shrink-0 items-center gap-1">
                       <button
                         onClick={() =>
                           socket?.emit(
@@ -282,7 +298,9 @@ function ParticipantsPanel({
                             },
                           )
                         }
-                        className="px-2 py-1 text-[9px] text-green-400 hover:bg-green-500/20 rounded transition-all"
+                        className="rounded px-2 py-1 text-[9px] text-green-400 transition-all hover:bg-green-500/20"
+                        title="Admit"
+                        aria-label="Admit user"
                       >
                         ✓
                       </button>
@@ -296,7 +314,9 @@ function ParticipantsPanel({
                             },
                           )
                         }
-                        className="px-2 py-1 text-[9px] text-red-400 hover:bg-red-500/20 rounded transition-all"
+                        className="rounded px-2 py-1 text-[9px] text-red-400 transition-all hover:bg-red-500/20"
+                        title="Reject"
+                        aria-label="Reject user"
                       >
                         ✕
                       </button>
@@ -309,27 +329,28 @@ function ParticipantsPanel({
         </div>
       )}
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-0.5">
-        {displayParticipants.map((p) => {
-          const isMe = p.userId === currentUserId;
-          const isHost = effectiveHostUserIds.has(p.userId);
-          const displayName = getDisplayName(p.userId);
-          const userEmail = getEmailFromUserId(p.userId);
+      <div className="flex-1 min-h-0 space-y-0.5 overflow-y-auto px-2 py-2">
+        {displayParticipants.map((participant) => {
+          const isMe = participant.userId === currentUserId;
+          const isHost = effectiveHostUserIds.has(participant.userId);
+          const displayName = formatDisplayName(
+            getDisplayName(participant.userId),
+          );
+          const userEmail = getEmailFromUserId(participant.userId);
           const hasScreenShare =
-            Boolean(p.screenShareStream) ||
+            Boolean(participant.screenShareStream) ||
             (isMe && Boolean(localState?.isScreenSharing));
 
           return (
             <div
-              key={p.userId}
-              className={`flex items-center justify-between px-2 py-1.5 rounded-md ${
+              key={participant.userId}
+              className={`flex items-center justify-between rounded-md px-2 py-1.5 transition-all ${
                 isMe ? "bg-[#F95F4A]/5" : "hover:bg-[#FEFCD9]/5"
-              } transition-all`}
+              }`}
             >
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                <span className="truncate text-xs text-[#FEFCD9]/80">
-                  {displayName}{" "}
-                  {isMe && <span className="text-[#F95F4A]/60">(you)</span>}
+                <span className="truncate text-sm text-[#FEFCD9]/85" title={userEmail}>
+                  {displayName} {isMe && <span className="text-[#F95F4A]/60">(you)</span>}
                 </span>
                 {isHost && (
                   <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-300/30 bg-amber-400/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-amber-200">
@@ -338,30 +359,32 @@ function ParticipantsPanel({
                 )}
               </div>
 
-              <div className="flex items-center gap-1 shrink-0">
-                {p.isHandRaised && <Hand className="w-3 h-3 text-amber-400" />}
+              <div className="flex shrink-0 items-center gap-1.5">
+                {participant.isHandRaised && (
+                  <Hand className="h-3.5 w-3.5 text-amber-400" />
+                )}
                 {hasScreenShare && (
-                  <Monitor className="w-3 h-3 text-green-500" />
+                  <Monitor className="h-3.5 w-3.5 text-green-500" />
                 )}
-                {p.isCameraOff ? (
-                  <VideoOff className="w-3 h-3 text-red-400/60" />
+                {participant.isCameraOff ? (
+                  <VideoOff className="h-3.5 w-3.5 text-red-400/70" />
                 ) : (
-                  <Video className="w-3 h-3 text-green-500/60" />
+                  <Video className="h-3.5 w-3.5 text-green-500/70" />
                 )}
-                {p.isMuted ? (
-                  <MicOff className="w-3 h-3 text-red-400/60" />
+                {participant.isMuted ? (
+                  <MicOff className="h-3.5 w-3.5 text-red-400/70" />
                 ) : (
-                  <Mic className="w-3 h-3 text-green-500/60" />
+                  <Mic className="h-3.5 w-3.5 text-green-500/70" />
                 )}
                 {isAdmin && !isMe && (
                   <>
                     {canManageHost && !isHost && (
                       <button
-                        onClick={() => handlePromoteHost(p.userId)}
-                        disabled={promotingHostUserId === p.userId}
+                        onClick={() => handlePromoteHost(participant.userId)}
+                        disabled={promotingHostUserId === participant.userId}
                         className="p-0.5 text-amber-300/70 hover:text-amber-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         title={
-                          promotingHostUserId === p.userId
+                          promotingHostUserId === participant.userId
                             ? "Promoting..."
                             : "Add as host"
                         }
@@ -369,39 +392,51 @@ function ParticipantsPanel({
                         <Crown className="w-2.5 h-2.5" />
                       </button>
                     )}
-                    {p.videoProducerId && !p.isCameraOff && (
+                    {participant.videoProducerId && !participant.isCameraOff && (
                       <button
-                        onClick={() => handleCloseProducer(p.videoProducerId!)}
-                        className="p-0.5 text-[#FEFCD9]/30 hover:text-red-400 transition-colors"
+                        onClick={() =>
+                          handleCloseProducer(participant.videoProducerId!)
+                        }
+                        className={`${hostUserActionButtonClass} hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-300`}
                         title="Stop video"
+                        aria-label="Stop participant video"
                       >
-                        <X className="w-2.5 h-2.5" />
+                        <VideoOff className="h-3.5 w-3.5" />
                       </button>
                     )}
-                    {p.audioProducerId && !p.isMuted && (
+                    {participant.audioProducerId && !participant.isMuted && (
                       <button
-                        onClick={() => handleCloseProducer(p.audioProducerId!)}
-                        className="p-0.5 text-[#FEFCD9]/30 hover:text-red-400 transition-colors"
+                        onClick={() =>
+                          handleCloseProducer(participant.audioProducerId!)
+                        }
+                        className={`${hostUserActionButtonClass} hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-300`}
                         title="Mute"
+                        aria-label="Mute participant"
                       >
-                        <X className="w-2.5 h-2.5" />
+                        <MicOff className="h-3.5 w-3.5" />
                       </button>
                     )}
                     <button
-                      onClick={() => openRedirectModal(p.userId)}
-                      className="p-0.5 text-[#FEFCD9]/30 hover:text-blue-400 transition-colors"
+                      onClick={() => openRedirectModal(participant.userId)}
+                      className={`${hostUserActionButtonClass} hover:border-blue-400/45 hover:bg-blue-500/10 hover:text-blue-300`}
                       title="Redirect"
+                      aria-label="Redirect participant"
                     >
-                      <ArrowRight className="w-2.5 h-2.5" />
+                      <ArrowRight className="h-3.5 w-3.5" />
                     </button>
                     <button
                       onClick={() =>
-                        socket?.emit("kickUser", { userId: p.userId }, () => {})
+                        socket?.emit(
+                          "kickUser",
+                          { userId: participant.userId },
+                          () => {},
+                        )
                       }
-                      className="p-0.5 text-[#FEFCD9]/30 hover:text-red-400 transition-colors"
+                      className={`${hostUserActionButtonClass} hover:border-red-400/45 hover:bg-red-500/10 hover:text-red-300`}
                       title="Kick"
+                      aria-label="Kick participant"
                     >
-                      <UserMinus className="w-2.5 h-2.5" />
+                      <UserMinus className="h-3.5 w-3.5" />
                     </button>
                   </>
                 )}
@@ -412,22 +447,22 @@ function ParticipantsPanel({
       </div>
 
       {showRedirectModal && (
-        <div className="absolute inset-0 bg-[#0d0e0d]/98 backdrop-blur-sm z-20 flex flex-col p-3 rounded-xl">
-          <div className="flex items-center justify-between mb-3 pb-2 border-b border-[#FEFCD9]/5">
+        <div className="absolute inset-0 z-20 flex flex-col rounded-xl bg-[#0d0e0d]/98 p-3 backdrop-blur-sm">
+          <div className="mb-3 flex items-center justify-between border-b border-[#FEFCD9]/5 pb-2">
             <span className="text-[10px] uppercase tracking-wider text-[#FEFCD9]/60">
               Redirect to
             </span>
             <button
               onClick={() => setShowRedirectModal(false)}
-              className="w-5 h-5 flex items-center justify-center text-[#FEFCD9]/40 hover:text-[#FEFCD9] transition-colors"
+              className="flex h-5 w-5 items-center justify-center text-[#FEFCD9]/40 transition-colors hover:text-[#FEFCD9]"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="h-3.5 w-3.5" />
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-1">
+          <div className="flex-1 space-y-1 overflow-y-auto">
             {filteredRooms.length === 0 ? (
-              <div className="flex items-center justify-center h-20 text-[#FEFCD9]/30 text-xs">
+              <div className="flex h-20 items-center justify-center text-xs text-[#FEFCD9]/30">
                 No other rooms
               </div>
             ) : (
@@ -435,13 +470,13 @@ function ParticipantsPanel({
                 <button
                   key={room.id}
                   onClick={() => handleRedirect(room.id)}
-                  className="w-full text-left px-3 py-2 rounded-md hover:bg-[#FEFCD9]/5 transition-all flex justify-between items-center"
+                  className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left transition-all hover:bg-[#FEFCD9]/5"
                 >
-                  <span className="text-xs text-[#FEFCD9]/80 truncate">
+                  <span className="truncate text-xs text-[#FEFCD9]/80">
                     {room.id}
                   </span>
-                  <span className="text-[10px] text-[#FEFCD9]/40 flex items-center gap-1">
-                    <Users className="w-3 h-3" />
+                  <span className="flex items-center gap-1 text-[10px] text-[#FEFCD9]/40">
+                    <Users className="h-3 w-3" />
                     {room.userCount}
                   </span>
                 </button>

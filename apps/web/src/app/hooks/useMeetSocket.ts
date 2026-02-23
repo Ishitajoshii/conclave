@@ -492,7 +492,7 @@ export function useMeetSocket({
           });
         }
 
-        if (info.type === "screen") {
+        if (info.type === "screen" && info.kind === "video") {
           setActiveScreenShareId(null);
         }
 
@@ -1056,7 +1056,7 @@ export function useMeetSocket({
                 producerId: producerInfo.producerId,
               });
 
-              if (producerInfo.type === "screen") {
+              if (producerInfo.type === "screen" && response.kind === "video") {
                 setActiveScreenShareId(producerInfo.producerId);
               }
 

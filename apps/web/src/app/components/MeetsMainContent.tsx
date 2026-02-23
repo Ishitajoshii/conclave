@@ -17,6 +17,7 @@ import PresentationLayout from "./PresentationLayout";
 import ReactionOverlay from "./ReactionOverlay";
 import BrowserLayout from "./BrowserLayout";
 import DevPlaygroundLayout from "./DevPlaygroundLayout";
+import ScreenShareAudioPlayers from "./ScreenShareAudioPlayers";
 import SystemAudioPlayers from "./SystemAudioPlayers";
 import WhiteboardLayout from "./WhiteboardLayout";
 import ParticipantVideo from "./ParticipantVideo";
@@ -576,6 +577,13 @@ export default function MeetsMainContent({
     [isChatOpen, setIsParticipantsOpen, toggleChat],
   );
 
+  const handleOpenParticipants = useCallback(() => {
+    if (isChatOpen) {
+      toggleChat();
+    }
+    setIsParticipantsOpen(true);
+  }, [isChatOpen, toggleChat, setIsParticipantsOpen]);
+
   const handleCloseParticipants = useCallback(
     () => setIsParticipantsOpen(false),
     [setIsParticipantsOpen],
@@ -644,6 +652,10 @@ export default function MeetsMainContent({
         audioOutputDeviceId={audioOutputDeviceId}
         muted={isBrowserAudioMuted}
         onAutoplayBlocked={onBrowserAudioAutoplayBlocked}
+      />
+      <ScreenShareAudioPlayers
+        participants={participants}
+        audioOutputDeviceId={audioOutputDeviceId}
       />
       {isJoined && reactions.length > 0 && (
         <ReactionOverlay
@@ -828,6 +840,7 @@ export default function MeetsMainContent({
           activeSpeakerId={activeSpeakerId}
           currentUserId={currentUserId}
           audioOutputDeviceId={audioOutputDeviceId}
+          onOpenParticipantsPanel={handleOpenParticipants}
           getDisplayName={resolveDisplayName}
         />
       )}
