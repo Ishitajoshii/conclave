@@ -163,7 +163,21 @@ function ParticipantsPanel({
   };
 
   const handlePromoteHost = (targetUserId: string) => {
-    if (!socket || !canManageHost || effectiveHostUserIds.has(targetUserId)) {
+    const targetParticipant = participants.get(targetUserId);
+    const isWebinarAttendee = Boolean(
+      (
+        targetParticipant as
+          | (Participant & { isWebinarAttendee?: boolean })
+          | undefined
+      )?.isWebinarAttendee,
+    );
+    if (
+      !socket ||
+      !canManageHost ||
+      effectiveHostUserIds.has(targetUserId) ||
+      targetParticipant?.isGhost ||
+      isWebinarAttendee
+    ) {
       return;
     }
     if (
@@ -333,6 +347,13 @@ function ParticipantsPanel({
         {displayParticipants.map((participant) => {
           const isMe = participant.userId === currentUserId;
           const isHost = effectiveHostUserIds.has(participant.userId);
+          const isWebinarAttendee = Boolean(
+            (
+              participant as Participant & { isWebinarAttendee?: boolean }
+            ).isWebinarAttendee,
+          );
+          const canPromoteParticipant =
+            canManageHost && !isHost && !participant.isGhost && !isWebinarAttendee;
           const displayName = formatDisplayName(
             getDisplayName(participant.userId),
           );
@@ -378,7 +399,7 @@ function ParticipantsPanel({
                 )}
                 {isAdmin && !isMe && (
                   <>
-                    {canManageHost && !isHost && (
+                    {canPromoteParticipant && (
                       <button
                         onClick={() => handlePromoteHost(participant.userId)}
                         disabled={promotingHostUserId === participant.userId}
