@@ -543,7 +543,6 @@ export default function MeetsClient({
       setMinutesBusy(false);
     }
   }, [roomId, leaveRoom]);
-  }, [playNotificationSound, socket]);
 
   useEffect(() => {
     leaveRoomCommandRef.current = leaveRoom;
