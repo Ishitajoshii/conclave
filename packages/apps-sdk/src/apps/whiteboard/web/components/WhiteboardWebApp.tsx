@@ -185,7 +185,7 @@ export function WhiteboardWebApp() {
         </div>
 
         <div className="absolute inset-0 pointer-events-none p-3 sm:p-4">
-          <div className="pointer-events-auto w-full rounded-2xl border border-white/5 bg-black/60 backdrop-blur-md px-2.5 py-2 shadow-[0_10px_24px_rgba(0,0,0,0.35)]">
+          <div className="pointer-events-auto w-full rounded-2xl border border-white/5 bg-[#0b0b0f]/90 backdrop-blur-md px-2.5 py-2 shadow-[0_10px_24px_rgba(0,0,0,0.35)]">
             <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex flex-wrap items-center gap-2 shrink-0">
               {locked ? (

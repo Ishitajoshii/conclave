@@ -221,7 +221,6 @@ function MobileControlsBar({
       }
       lastReactionTimeRef.current = now;
       onSendReaction(reaction);
-      setIsReactionMenuOpen(false);
     },
     [isObserverMode, onSendReaction]
   );
@@ -424,62 +423,57 @@ function MobileControlsBar({
 
   return (
     <>
-      {/* Reaction menu overlay */}
-      {isReactionMenuOpen && (
-        <div className="fixed inset-0 z-40">
+      <div
+        className="mobile-sheet-root z-50"
+        data-state={isReactionMenuOpen ? "open" : "closed"}
+        aria-hidden={!isReactionMenuOpen}
+      >
+        <div
+          className="mobile-sheet-overlay"
+          onClick={() => setIsReactionMenuOpen(false)}
+        />
+        <div className="mobile-sheet-panel">
           <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-fade-in"
-            onClick={() => setIsReactionMenuOpen(false)}
-          />
-          <div
-            className="absolute bottom-24 left-1/2 -translate-x-1/2 w-[min(92vw,420px)] px-2"
+            className="mobile-sheet w-full px-4 pb-[calc(18px+env(safe-area-inset-bottom))] pt-3"
             role="dialog"
             aria-modal="true"
             aria-label="Reactions"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mobile-glass rounded-[24px] border border-[#FEFCD9]/12 shadow-[0_18px_45px_rgba(0,0,0,0.45)] animate-scale-in">
-              <div
-                className="flex items-center justify-between px-4 pt-3"
-                style={{ fontFamily: "'PolySans Mono', monospace" }}
+            <div className="relative px-1 pt-1 pb-3">
+              <div className="mx-auto mobile-sheet-grabber" />
+              <button
+                onClick={() => setIsReactionMenuOpen(false)}
+                className="absolute right-0 top-0 h-7 w-7 mobile-pill mobile-glass-soft flex items-center justify-center text-[#FEFCD9]/70 hover:text-[#FEFCD9]"
+                aria-label="Close reactions"
               >
-                <span className="text-[10px] uppercase tracking-[0.25em] text-[#FEFCD9]/60">
-                  Reactions
-                </span>
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="mt-3 grid grid-cols-6 gap-2 max-h-[40vh] overflow-y-auto no-scrollbar px-2">
+              {reactionOptions.map((reaction) => (
                 <button
-                  onClick={() => setIsReactionMenuOpen(false)}
-                  className="h-7 w-7 rounded-full mobile-glass-soft text-[#FEFCD9]/70 hover:text-[#FEFCD9] flex items-center justify-center"
-                  aria-label="Close reactions"
+                  key={reaction.id}
+                  onClick={() => handleReactionClick(reaction)}
+                  className="h-11 w-11 sm:h-12 sm:w-12 rounded-full bg-[#141414]/70 border border-[#FEFCD9]/10 text-xl sm:text-2xl flex items-center justify-center transition-transform duration-150 active:scale-95 hover:bg-[#FEFCD9]/10"
+                  aria-label={`React ${reaction.label}`}
                 >
-                  <X className="h-3.5 w-3.5" />
+                  {reaction.kind === "emoji" ? (
+                    reaction.value
+                  ) : (
+                    <img
+                      src={reaction.value}
+                      alt={reaction.label}
+                      className="w-7 h-7 sm:w-8 sm:h-8 object-contain"
+                    />
+                  )}
                 </button>
-              </div>
-              <div className="flex items-center gap-2 px-3 pb-3 pt-2 overflow-x-auto no-scrollbar snap-x snap-mandatory">
-                {reactionOptions.map((reaction) => (
-                  <button
-                    key={reaction.id}
-                    onClick={() => handleReactionClick(reaction)}
-                    className="snap-start w-12 h-12 shrink-0 rounded-full bg-[#141414]/70 border border-[#FEFCD9]/10 text-2xl flex items-center justify-center transition-transform duration-150 active:scale-95 hover:bg-[#FEFCD9]/10"
-                    aria-label={`React ${reaction.label}`}
-                  >
-                    {reaction.kind === "emoji" ? (
-                      reaction.value
-                    ) : (
-                      <img
-                        src={reaction.value}
-                        alt={reaction.label}
-                        className="w-8 h-8 object-contain"
-                      />
-                    )}
-                  </button>
-                ))}
+              ))}
             </div>
           </div>
         </div>
       </div>
-      )}
 
-      {/* More menu drawer */}
       <div
         className="mobile-sheet-root z-40"
         data-state={isMoreMenuOpen ? "open" : "closed"}

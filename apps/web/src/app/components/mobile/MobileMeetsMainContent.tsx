@@ -29,6 +29,7 @@ import MobileJoinScreen from "./MobileJoinScreen";
 import MobileParticipantsPanel from "./MobileParticipantsPanel";
 import MobilePresentationLayout from "./MobilePresentationLayout";
 import MobileWhiteboardLayout from "./MobileWhiteboardLayout";
+import AndroidUpsellSheet from "./AndroidUpsellSheet";
 import ScreenShareAudioPlayers from "../ScreenShareAudioPlayers";
 import SystemAudioPlayers from "../SystemAudioPlayers";
 import { isSystemUserId } from "../../lib/utils";
@@ -320,6 +321,20 @@ function MobileMeetsMainContent({
       refreshState();
     }
   }, [connectionState, refreshState]);
+  useEffect(() => {
+    if (typeof navigator === "undefined" || typeof window === "undefined") return;
+    const isAndroid = /android/i.test(navigator.userAgent);
+    const dismissed = window.localStorage.getItem("conclave_android_upsell_dismissed");
+    if (isAndroid && !dismissed) {
+      setShowAndroidUpsell(true);
+    }
+  }, []);
+  const dismissAndroidUpsell = useCallback(() => {
+    setShowAndroidUpsell(false);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("conclave_android_upsell_dismissed", "1");
+    }
+  }, []);
   const handleToggleParticipants = useCallback(
     () =>
       setIsParticipantsOpen((prev) => {
@@ -395,6 +410,7 @@ function MobileMeetsMainContent({
     x: number;
     y: number;
   } | null>(null);
+  const [showAndroidUpsell, setShowAndroidUpsell] = useState(false);
   const webinarStage = useMemo(() => {
     if (!webinarParticipants.length) {
       return null;
@@ -725,6 +741,13 @@ function MobileMeetsMainContent({
           )}
         </div>
       </div>
+
+      {!isWebinarAttendee && (
+        <AndroidUpsellSheet
+          isOpen={showAndroidUpsell}
+          onClose={dismissAndroidUpsell}
+        />
+      )}
 
       {/* Reactions overlay */}
       {!isWebinarAttendee && reactions.length > 0 && (

@@ -26,6 +26,7 @@ import {
   sanitizeRoomCode,
 } from "../../lib/utils";
 import MeetsErrorBanner from "../MeetsErrorBanner";
+import AndroidUpsellSheet from "./AndroidUpsellSheet";
 
 const normalizeGuestName = (value: string): string =>
   value.trim().replace(/\s+/g, " ");
@@ -153,6 +154,7 @@ function MobileJoinScreen({
   );
   const isSigningIn = signInProvider !== null;
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [showAndroidUpsell, setShowAndroidUpsell] = useState(false);
 
   const { data: session } = useSession();
   const canSignOut = Boolean(session?.user || user?.id || user?.email);
@@ -365,7 +367,22 @@ function MobileJoinScreen({
     onIsAdminChange(false);
   }, [isRoutedRoom, onIsAdminChange]);
 
-  // Welcome phase
+  useEffect(() => {
+    if (typeof navigator === "undefined" || typeof window === "undefined") return;
+    const isAndroid = /android/i.test(navigator.userAgent);
+    const dismissed = window.localStorage.getItem("conclave_android_upsell_dismissed");
+    if (isAndroid && !dismissed) {
+      setShowAndroidUpsell(true);
+    }
+  }, []);
+
+  const dismissAndroidUpsell = () => {
+    setShowAndroidUpsell(false);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("conclave_android_upsell_dismissed", "1");
+    }
+  };
+
   if (phase === "welcome") {
     return (
       <div className="flex-1 flex flex-col items-center justify-center px-6 bg-[#060606] safe-area-pt relative overflow-hidden">
@@ -373,14 +390,14 @@ function MobileJoinScreen({
         <div className="absolute inset-0 acm-bg-dot-grid pointer-events-none" />
         <div className="relative z-10 text-center mb-8">
           <div
-            className="text-[11px] text-[#FEFCD9]/40 uppercase tracking-[0.4em] mb-4"
-            style={{ fontFamily: "'PolySans Mono', monospace" }}
+            className="text-xl text-[#FEFCD9]/40 mb-2 tracking-wide"
+            style={{ fontFamily: "'PolySans Bulky Wide', sans-serif" }}
           >
             welcome to
           </div>
-          <div className="flex items-center justify-center gap-2">
+          <div className="relative inline-block">
             <span
-              className="text-3xl text-[#F95F4A]/70"
+              className="absolute -left-8 top-1/2 -translate-y-1/2 text-[#F95F4A]/40 text-3xl"
               style={{ fontFamily: "'PolySans Mono', monospace" }}
             >
               [
@@ -392,7 +409,7 @@ function MobileJoinScreen({
               c0nclav3
             </h1>
             <span
-              className="text-3xl text-[#F95F4A]/70"
+              className="absolute -right-8 top-1/2 -translate-y-1/2 text-[#F95F4A]/40 text-3xl"
               style={{ fontFamily: "'PolySans Mono', monospace" }}
             >
               ]
@@ -400,7 +417,7 @@ function MobileJoinScreen({
           </div>
         </div>
         <p
-          className="relative z-10 text-sm text-[#FEFCD9]/40 mb-10 text-center max-w-[320px]"
+          className="relative z-10 text-sm text-[#FEFCD9]/30 mb-10 text-center max-w-[320px]"
           style={{ fontFamily: "'PolySans Trial', sans-serif" }}
         >
           ACM-VIT's in-house video conferencing platform
@@ -408,7 +425,7 @@ function MobileJoinScreen({
 
         <button
           onClick={() => setManualPhase("auth")}
-          className="relative z-10 flex items-center gap-3 px-8 py-3 bg-[#F95F4A] text-white text-[11px] uppercase tracking-[0.3em] rounded-full active:scale-95 transition-all hover:bg-[#e8553f]"
+          className="relative z-10 group flex items-center gap-3 px-8 py-3 bg-[#F95F4A] text-white text-xs uppercase tracking-widest rounded-lg active:scale-95 transition-all hover:bg-[#e8553f] hover:gap-4"
           style={{ fontFamily: "'PolySans Mono', monospace" }}
         >
           <span>LET'S GO</span>
@@ -638,8 +655,8 @@ function MobileJoinScreen({
           {/* User email */}
           <div className="absolute top-4 left-4 flex items-center gap-2 max-w-[70%]">
             <div
-              className="min-w-0 px-3 py-1.5 mobile-glass mobile-pill text-xs text-[#FEFCD9]/70 truncate"
-              style={{ fontFamily: "'PolySans Mono', monospace" }}
+              className="min-w-0 h-8 px-3 flex items-center mobile-glass mobile-pill text-xs text-[#FEFCD9]/80 truncate"
+              style={{ fontFamily: "'PolySans Trial', sans-serif" }}
             >
               {userEmail}
             </div>
@@ -647,8 +664,8 @@ function MobileJoinScreen({
               <button
                 onClick={handleSignOut}
                 disabled={isSigningOut}
-                className="shrink-0 px-2.5 py-1 mobile-glass-soft mobile-pill text-[9px] uppercase tracking-[0.2em] text-[#FEFCD9]/70 disabled:opacity-50"
-                style={{ fontFamily: "'PolySans Mono', monospace" }}
+                className="shrink-0 h-8 px-3 flex items-center mobile-glass mobile-pill text-xs text-[#FEFCD9]/80 disabled:opacity-50"
+                style={{ fontFamily: "'PolySans Trial', sans-serif" }}
               >
                 {isSigningOut ? "Signing out..." : "Sign out"}
               </button>
@@ -664,9 +681,12 @@ function MobileJoinScreen({
         </div>
       </div>
 
-      {/* Bottom controls */}
       <div className="absolute bottom-0 left-0 right-0 z-10 px-4 pb-[calc(12px+env(safe-area-inset-bottom))]">
         <div className="flex flex-col gap-3">
+          <AndroidUpsellSheet
+            isOpen={showAndroidUpsell}
+            onClose={dismissAndroidUpsell}
+          />
         <div className="flex mobile-glass mobile-pill p-1">
           <button
             onClick={() => {
