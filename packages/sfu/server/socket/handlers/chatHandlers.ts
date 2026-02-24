@@ -14,6 +14,15 @@ const fallbackDisplayNameFromUserId = (userId: string): string =>
 const normalizeLookupToken = (value: string): string =>
   value.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "");
 
+interface DirectMessageTargetCandidate {
+  userId: string;
+  displayName: string;
+  normalizedUserId: string;
+  normalizedBaseUserId: string;
+  normalizedHandle: string;
+  normalizedDisplayName: string;
+}
+
 const parseDirectMessageIntent = (
   content: string,
 ):
@@ -54,55 +63,98 @@ const resolveDirectMessageTarget = (
   if (!normalizedTargetToken) {
     return { error: "Invalid private message target." };
   }
-
-  const senderAliases = [
-    senderUserId,
+  const senderBaseUserId = normalizeLookupToken(
     senderUserId.split("#")[0] || senderUserId,
-    (senderUserId.split("#")[0] || senderUserId).split("@")[0] || senderUserId,
-    room.getDisplayNameForUser(senderUserId) || fallbackDisplayNameFromUserId(senderUserId),
-  ].map(normalizeLookupToken);
+  );
 
-  if (senderAliases.includes(normalizedTargetToken)) {
-    return { error: "You cannot private message yourself." };
-  }
-
-  const matches: { userId: string; displayName: string }[] = [];
-
+  const candidates: DirectMessageTargetCandidate[] = [];
   for (const [candidateUserId] of room.clients.entries()) {
-    if (candidateUserId === senderUserId) continue;
-
     const displayName =
       room.getDisplayNameForUser(candidateUserId) ||
       fallbackDisplayNameFromUserId(candidateUserId);
-    const userIdWithoutSession = candidateUserId.split("#")[0] || candidateUserId;
-    const handle = userIdWithoutSession.split("@")[0] || userIdWithoutSession;
+    const baseUserId = candidateUserId.split("#")[0] || candidateUserId;
+    const handle = baseUserId.split("@")[0] || baseUserId;
 
-    const aliases = [
-      candidateUserId,
-      userIdWithoutSession,
-      handle,
+    candidates.push({
+      userId: candidateUserId,
       displayName,
-    ].map(normalizeLookupToken);
+      normalizedUserId: normalizeLookupToken(candidateUserId),
+      normalizedBaseUserId: normalizeLookupToken(baseUserId),
+      normalizedHandle: normalizeLookupToken(handle),
+      normalizedDisplayName: normalizeLookupToken(displayName),
+    });
+  }
 
-    if (aliases.includes(normalizedTargetToken)) {
-      matches.push({
-        userId: candidateUserId,
-        displayName,
-      });
+  const resolveUniqueMatch = (
+    matcher: (candidate: DirectMessageTargetCandidate) => boolean,
+  ): DirectMessageTargetCandidate | { error: string } | null => {
+    const matches = candidates.filter(matcher);
+    if (matches.length === 0) return null;
+    if (matches.length > 1) {
+      return {
+        error: `Multiple users match "${targetToken}". Use a more specific username.`,
+      };
     }
-  }
+    return matches[0] ?? null;
+  };
 
-  if (matches.length === 0) {
-    return { error: `User "${targetToken}" not found for private message.` };
-  }
-
-  if (matches.length > 1) {
+  const byFullUserId = resolveUniqueMatch(
+    (candidate) => candidate.normalizedUserId === normalizedTargetToken,
+  );
+  if (byFullUserId && "error" in byFullUserId) return byFullUserId;
+  if (byFullUserId) {
+    if (byFullUserId.normalizedBaseUserId === senderBaseUserId) {
+      return { error: "You cannot private message yourself." };
+    }
     return {
-      error: `Multiple users match "${targetToken}". Use a more specific username.`,
+      userId: byFullUserId.userId,
+      displayName: byFullUserId.displayName,
     };
   }
 
-  return matches[0];
+  const byBaseUserId = resolveUniqueMatch(
+    (candidate) => candidate.normalizedBaseUserId === normalizedTargetToken,
+  );
+  if (byBaseUserId && "error" in byBaseUserId) return byBaseUserId;
+  if (byBaseUserId) {
+    if (byBaseUserId.normalizedBaseUserId === senderBaseUserId) {
+      return { error: "You cannot private message yourself." };
+    }
+    return {
+      userId: byBaseUserId.userId,
+      displayName: byBaseUserId.displayName,
+    };
+  }
+
+  const byHandle = resolveUniqueMatch(
+    (candidate) => candidate.normalizedHandle === normalizedTargetToken,
+  );
+  if (byHandle && "error" in byHandle) return byHandle;
+  if (byHandle) {
+    if (byHandle.normalizedBaseUserId === senderBaseUserId) {
+      return { error: "You cannot private message yourself." };
+    }
+    return {
+      userId: byHandle.userId,
+      displayName: byHandle.displayName,
+    };
+  }
+
+  const byDisplayName = resolveUniqueMatch(
+    (candidate) => candidate.normalizedDisplayName === normalizedTargetToken,
+  );
+  if (byDisplayName && "error" in byDisplayName) return byDisplayName;
+  if (byDisplayName) {
+    if (byDisplayName.normalizedBaseUserId === senderBaseUserId) {
+      return { error: "You cannot private message yourself." };
+    }
+    return {
+      userId: byDisplayName.userId,
+      displayName: byDisplayName.displayName,
+    };
+  }
+
+  return { error: `User "${targetToken}" not found for private message.` };
 };
 
 export const registerChatHandlers = (context: ConnectionContext): void => {
@@ -117,7 +169,7 @@ export const registerChatHandlers = (context: ConnectionContext): void => {
           | { success: boolean; message?: ChatMessage }
           | { error: string },
       ) => void,
-      ) => {
+    ) => {
       try {
         if (!context.currentClient || !context.currentRoom) {
           respond(callback, { error: "Not in a room" });
@@ -223,10 +275,7 @@ export const registerChatHandlers = (context: ConnectionContext): void => {
 
           targetClient.socket.emit("chatMessage", message);
           Logger.info(
-            `DM in room ${room.id}: ${displayName} -> ${dmTarget.displayName}: ${messageContent.substring(
-              0,
-              50,
-            )}`,
+            `DM in room ${room.id}: ${displayName} -> ${dmTarget.displayName} (messageId=${message.id})`,
           );
         } else {
           socket.to(room.channelId).emit("chatMessage", message);

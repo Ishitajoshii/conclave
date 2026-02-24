@@ -408,6 +408,14 @@ export const registerAdminHandlers = (
       respond(cb, { error: "Room not found" });
       return;
     }
+    if (!(context.currentClient instanceof Admin)) {
+      respond(cb, { error: "Admin privileges required" });
+      return;
+    }
+    if (typeof enabled !== "boolean") {
+      respond(cb, { error: "Invalid DM state" });
+      return;
+    }
 
     context.currentRoom.setDmEnabled(enabled);
     Logger.info(
@@ -430,6 +438,10 @@ export const registerAdminHandlers = (
   socket.on("getDmEnabledStatus", (cb) => {
     if (!context.currentRoom) {
       respond(cb, { error: "Room not found" });
+      return;
+    }
+    if (!(context.currentClient instanceof Admin)) {
+      respond(cb, { error: "Admin privileges required" });
       return;
     }
     respond(cb, { enabled: context.currentRoom.isDmEnabled });

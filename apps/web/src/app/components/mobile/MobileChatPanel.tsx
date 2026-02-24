@@ -1,9 +1,7 @@
 "use client";
 
-import { Send, X } from "lucide-react";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Send } from "lucide-react";
-import { memo, useMemo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage } from "../../lib/types";
 import { getActionText, getCommandSuggestions } from "../../lib/chat-commands";
 import { formatDisplayName, getChatMessageSegments } from "../../lib/utils";
@@ -59,13 +57,13 @@ function MobileChatPanel({
     showCommandSuggestions && !localValue.slice(1).includes(" ");
 
   const mentionQuery = useMemo(() => {
-    if (isChatDisabled || !chatInput.startsWith("@")) return null;
-    const raw = chatInput.slice(1);
+    if (isChatDisabled || !localValue.startsWith("@")) return null;
+    const raw = localValue.slice(1);
     if (!raw || /\s/.test(raw)) {
       return raw.length === 0 ? "" : null;
     }
     return raw.toLowerCase();
-  }, [chatInput, isChatDisabled]);
+  }, [isChatDisabled, localValue]);
 
   const mentionSuggestions = useMemo(() => {
     if (mentionQuery === null) return [];
@@ -99,11 +97,11 @@ function MobileChatPanel({
     !showCommandSuggestions && mentionQuery !== null && mentionSuggestions.length > 0;
 
   useEffect(() => {
-    if (!messages.length) return;
+    if (!isOpen || !messages.length) return;
     requestAnimationFrame(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     });
-  }, [messages.length]);
+  }, [isOpen, messages.length]);
 
   useEffect(() => {
     if (chatInput !== localValue) {
@@ -114,7 +112,6 @@ function MobileChatPanel({
   useEffect(() => {
     setActiveCommandIndex(0);
     setActiveMentionIndex(0);
-  }, [chatInput]);
   }, [localValue]);
 
   useEffect(() => {
@@ -133,7 +130,9 @@ function MobileChatPanel({
   const applyMentionSuggestion = (index: number) => {
     const suggestion = mentionSuggestions[index];
     if (!suggestion) return;
-    onInputChange(`@${suggestion.mentionToken} `);
+    const nextValue = `@${suggestion.mentionToken} `;
+    setLocalValue(nextValue);
+    onInputChange(nextValue);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -196,12 +195,11 @@ function MobileChatPanel({
     return formatDisplayName(userId);
   };
 
-  const formatTime = (timestamp: number) => {
-    return new Date(timestamp).toLocaleTimeString([], {
+  const formatTime = (timestamp: number) =>
+    new Date(timestamp).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
-  };
 
   const renderMessageContent = (content: string) =>
     getChatMessageSegments(content).map((segment, index) =>
@@ -266,240 +264,174 @@ function MobileChatPanel({
               </button>
             </div>
           </div>
-        ) : (
-          messages.map((message) => {
-            const isOwn = message.userId === currentUserId;
-            const actionText = getActionText(message.content);
-            const directMessageLabel = message.isDirect
-              ? isOwn
-                ? `Private to ${
-                    message.dmTargetDisplayName ||
-                    resolveDisplayName(message.dmTargetUserId || message.userId)
-                  }`
-                : "Private message"
-              : null;
-            if (actionText) {
-              return (
-                <div
-                  key={message.id}
-                  className="text-[11px] text-[#FEFCD9]/70 italic px-1"
-                >
-                  {directMessageLabel ? (
-                    <p className="mb-0.5 text-[9px] not-italic uppercase tracking-[0.14em] text-amber-300/80">
-                      {directMessageLabel}
-                    </p>
-                  ) : null}
-                  <span className="text-[#F95F4A]/80">
-                    {isOwn ? "You" : resolveDisplayName(message.userId)}
-                  </span>{" "}
-                  {actionText}
-                </div>
-              );
-            }
-            return (
-              <div
-                key={message.id}
-                className={`flex flex-col ${isOwn ? "items-end" : "items-start"}`}
-              >
-                {!isOwn && (
-                  <span className="text-[10px] text-[#FEFCD9]/50 mb-0.5 px-1 uppercase tracking-wide">
-                    {resolveDisplayName(message.userId)}
-                  </span>
-                )}
-                <div
-                  className={`max-w-[80%] rounded-2xl px-3 py-2 ${
-                    isOwn
-                      ? "bg-[#F95F4A] text-white rounded-br-sm selection:bg-white/90 selection:text-[#0d0e0d]"
-                      : "bg-[#2a2a2a] text-[#FEFCD9] rounded-bl-sm selection:bg-[#F95F4A]/40 selection:text-white"
-                  }`}
-                >
-                    <p className="text-sm break-words">
-                    {directMessageLabel ? (
-                      <span className="mb-1 block text-[9px] uppercase tracking-[0.14em] text-amber-300/80">
-                        {directMessageLabel}
-                      </span>
-                    ) : null}
-                    <span>
-                    {renderMessageContent(message.content)}
-                    </span>
-                  </p>
-                </div>
-                <span className="text-[9px] text-[#FEFCD9]/30 mt-0.5 px-1">
-                  {formatTime(message.timestamp)}
-                </span>
+
+          <div className="flex-1 mobile-sheet-scroll overflow-y-auto px-4 pb-3 space-y-3">
+            {messages.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center h-full py-6">
+                <p className="text-[#FEFCD9]/45 text-sm text-center">
+                  No messages yet.
+                  <br />
+                  Start the conversation!
+                </p>
               </div>
-            );
-          })
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+            ) : (
+              messages.map((message) => {
+                const isOwn = message.userId === currentUserId;
+                const actionText = getActionText(message.content);
+                const isNew =
+                  hasInitializedRef.current && newMessageIds.has(message.id);
+                const directMessageLabel = message.isDirect
+                  ? isOwn
+                    ? `Private to ${
+                        message.dmTargetDisplayName ||
+                        resolveDisplayName(message.dmTargetUserId || message.userId)
+                      }`
+                    : "Private message"
+                  : null;
 
-      {/* Input */}
-      <form
-        onSubmit={handleSubmit}
-        className="relative flex items-center gap-2 px-4 py-3 border-t border-[#FEFCD9]/10 bg-[#1a1a1a]"
-      >
-        {showMentionSuggestions && (
-          <div className="absolute bottom-full mb-2 left-0 right-0 max-h-40 overflow-y-auto rounded-2xl border border-[#FEFCD9]/10 bg-[#0d0e0d]/95 shadow-xl">
-            {mentionSuggestions.map((participant, index) => {
-              const isActive = index === activeMentionIndex;
-              return (
-                <button
-                  key={participant.userId}
-                  type="button"
-                  onClick={() => applyMentionSuggestion(index)}
-                  className={`w-full px-3 py-2 text-left text-sm transition-colors ${
-                    isActive
-                      ? "bg-[#F95F4A]/20 text-[#FEFCD9]"
-                      : "text-[#FEFCD9]/70 hover:bg-[#FEFCD9]/10"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium">{participant.displayName}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-        {showCommandSuggestions && (
-          <div className="absolute bottom-full mb-2 left-0 right-0 max-h-40 overflow-y-auto rounded-2xl border border-[#FEFCD9]/10 bg-[#0d0e0d]/95 shadow-xl">
-            {commandSuggestions.map((command, index) => {
-              const isActive = index === activeCommandIndex;
-              return (
-                <button
-                  key={command.id}
-                  type="button"
-                  onClick={() => onInputChange(command.insertText)}
-                  className={`w-full px-3 py-2 text-left text-sm transition-colors ${
-                    isActive
-                      ? "bg-[#F95F4A]/20 text-[#FEFCD9]"
-                      : "text-[#FEFCD9]/70 hover:bg-[#FEFCD9]/10"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium">/{command.label}</span>
-                    <span className="text-[10px] text-[#FEFCD9]/40">
-                      {command.usage}
-
-        <div className="flex-1 mobile-sheet-scroll overflow-y-auto px-4 pb-3 space-y-3">
-          {messages.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center h-full py-6">
-              <p className="text-[#FEFCD9]/45 text-sm text-center">
-                No messages yet.
-                <br />
-                Start the conversation!
-              </p>
-            </div>
-          ) : (
-            messages.map((message) => {
-              const isOwn = message.userId === currentUserId;
-              const actionText = getActionText(message.content);
-              const isNew =
-                hasInitializedRef.current && newMessageIds.has(message.id);
-              if (actionText) {
-                return (
-                  <div key={message.id} className={isNew ? "mobile-chat-message-new" : ""}>
-                    <div className="text-[11px] text-[#FEFCD9]/70 italic px-1">
-                      <span className="text-[#F95F4A]/80">
-                        {isOwn ? "You" : resolveDisplayName(message.userId)}
-                      </span>{" "}
-                      {actionText}
+                if (actionText) {
+                  return (
+                    <div
+                      key={message.id}
+                      className={isNew ? "mobile-chat-message-new" : ""}
+                    >
+                      <div className="text-[11px] text-[#FEFCD9]/70 italic px-1">
+                        {directMessageLabel ? (
+                          <p className="mb-0.5 text-[9px] not-italic uppercase tracking-[0.14em] text-amber-300/80">
+                            {directMessageLabel}
+                          </p>
+                        ) : null}
+                        <span className="text-[#F95F4A]/80">
+                          {isOwn ? "You" : resolveDisplayName(message.userId)}
+                        </span>{" "}
+                        {actionText}
+                      </div>
                     </div>
-                  </div>
-                );
-              }
-              return (
-                <div
-                  key={message.id}
-                  className={`${isNew ? "mobile-chat-message-new" : ""} flex flex-col ${isOwn ? "items-end" : "items-start"}`}
-                >
-                  {!isOwn && (
-                    <span className="text-[10px] text-[#FEFCD9]/50 mb-0.5 px-1 uppercase tracking-[0.18em]">
-                      {resolveDisplayName(message.userId)}
-                    </span>
-                  )}
+                  );
+                }
+
+                return (
                   <div
-                    className={`max-w-[80%] rounded-[18px] px-3 py-2 ${
-                      isOwn
-                        ? "bg-[#F95F4A] text-white rounded-br-md selection:bg-white/90 selection:text-[#0d0e0d]"
-                        : "bg-[#2a2a2a]/90 text-[#FEFCD9] rounded-bl-md selection:bg-[#F95F4A]/40 selection:text-white"
-                    }`}
+                    key={message.id}
+                    className={`${isNew ? "mobile-chat-message-new" : ""} flex flex-col ${isOwn ? "items-end" : "items-start"}`}
                   >
-                    <p className="text-sm break-words">
-                      {renderMessageContent(message.content)}
-                    </p>
-                  </div>
-                  <span className="text-[9px] text-[#FEFCD9]/35 mt-0.5 px-1">
-                    {formatTime(message.timestamp)}
-                  </span>
-                </div>
-              );
-            })
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        <form
-          onSubmit={handleSubmit}
-          className="relative flex items-center gap-2 px-4 py-3 border-t border-[#FEFCD9]/10 bg-[#0b0b0b]/95"
-        >
-          {showCommandSuggestions && (
-            <div className="absolute bottom-full mb-2 left-0 right-0 max-h-48 overflow-y-auto mobile-sheet-card shadow-xl overflow-hidden">
-              {commandSuggestions.map((command, index) => {
-                const isActive = index === activeCommandIndex;
-                return (
-                  <button
-                    key={command.id}
-                    type="button"
-                    onClick={() => onInputChange(command.insertText)}
-                    className={`w-full px-3 py-2 text-left text-sm transition-colors ${
-                      isActive
-                        ? "bg-[#F95F4A]/20 text-[#FEFCD9]"
-                        : "text-[#FEFCD9]/70 hover:bg-[#FEFCD9]/10"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium">/{command.label}</span>
-                      <span className="text-[10px] text-[#FEFCD9]/40">
-                        {command.usage}
+                    {!isOwn && (
+                      <span className="text-[10px] text-[#FEFCD9]/50 mb-0.5 px-1 uppercase tracking-[0.18em]">
+                        {resolveDisplayName(message.userId)}
                       </span>
+                    )}
+                    <div
+                      className={`max-w-[80%] rounded-[18px] px-3 py-2 ${
+                        isOwn
+                          ? "bg-[#F95F4A] text-white rounded-br-md selection:bg-white/90 selection:text-[#0d0e0d]"
+                          : "bg-[#2a2a2a]/90 text-[#FEFCD9] rounded-bl-md selection:bg-[#F95F4A]/40 selection:text-white"
+                      }`}
+                    >
+                      <p className="text-sm break-words">
+                        {directMessageLabel ? (
+                          <span className="mb-1 block text-[9px] uppercase tracking-[0.14em] text-amber-300/80">
+                            {directMessageLabel}
+                          </span>
+                        ) : null}
+                        {renderMessageContent(message.content)}
+                      </p>
                     </div>
-                    <p className="text-[10px] text-[#FEFCD9]/45">
-                      {command.description}
-                    </p>
-                  </button>
+                    <span className="text-[9px] text-[#FEFCD9]/35 mt-0.5 px-1">
+                      {formatTime(message.timestamp)}
+                    </span>
+                  </div>
                 );
-              })}
-            </div>
-          )}
-          <input
-            ref={inputRef}
-            type="text"
-            value={localValue}
-            onChange={(e) => {
-              setLocalValue(e.target.value);
-              onInputChange(e.target.value);
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              isGhostMode
-                ? "Ghost mode: chat disabled"
-                : isChatLocked && !isAdmin
-                  ? "Chat locked by host"
-                  : "Type a message or /..."
-            }
-            disabled={isChatDisabled}
-            className="flex-1 mobile-glass mobile-pill px-4 py-2.5 text-sm text-[#FEFCD9] placeholder:text-[#FEFCD9]/30 focus:outline-none focus:border-[#F95F4A]/50 disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={!localValue.trim() || isChatDisabled}
-            className="w-10 h-10 rounded-full bg-[#F95F4A] text-white flex items-center justify-center disabled:opacity-30 active:scale-95 transition-transform"
+              })
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <form
+            onSubmit={handleSubmit}
+            className="relative flex items-center gap-2 px-4 py-3 border-t border-[#FEFCD9]/10 bg-[#0b0b0b]/95"
           >
-            <Send className="w-4 h-4" />
-          </button>
-        </form>
+            {showMentionSuggestions && (
+              <div className="absolute bottom-full mb-2 left-0 right-0 max-h-40 overflow-y-auto mobile-sheet-card shadow-xl overflow-hidden">
+                {mentionSuggestions.map((participant, index) => {
+                  const isActive = index === activeMentionIndex;
+                  return (
+                    <button
+                      key={participant.userId}
+                      type="button"
+                      onClick={() => applyMentionSuggestion(index)}
+                      className={`w-full px-3 py-2 text-left text-sm transition-colors ${
+                        isActive
+                          ? "bg-[#F95F4A]/20 text-[#FEFCD9]"
+                          : "text-[#FEFCD9]/70 hover:bg-[#FEFCD9]/10"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium">{participant.displayName}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {showCommandSuggestions && (
+              <div className="absolute bottom-full mb-2 left-0 right-0 max-h-48 overflow-y-auto mobile-sheet-card shadow-xl overflow-hidden">
+                {commandSuggestions.map((command, index) => {
+                  const isActive = index === activeCommandIndex;
+                  return (
+                    <button
+                      key={command.id}
+                      type="button"
+                      onClick={() => {
+                        setLocalValue(command.insertText);
+                        onInputChange(command.insertText);
+                      }}
+                      className={`w-full px-3 py-2 text-left text-sm transition-colors ${
+                        isActive
+                          ? "bg-[#F95F4A]/20 text-[#FEFCD9]"
+                          : "text-[#FEFCD9]/70 hover:bg-[#FEFCD9]/10"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium">/{command.label}</span>
+                        <span className="text-[10px] text-[#FEFCD9]/40">
+                          {command.usage}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-[#FEFCD9]/45">
+                        {command.description}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <input
+              ref={inputRef}
+              type="text"
+              value={localValue}
+              onChange={(e) => {
+                setLocalValue(e.target.value);
+                onInputChange(e.target.value);
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                isGhostMode
+                  ? "Ghost mode: chat disabled"
+                  : isChatLocked && !isAdmin
+                    ? "Chat locked by host"
+                    : "Type a message or /..."
+              }
+              disabled={isChatDisabled}
+              className="flex-1 mobile-glass mobile-pill px-4 py-2.5 text-sm text-[#FEFCD9] placeholder:text-[#FEFCD9]/30 focus:outline-none focus:border-[#F95F4A]/50 disabled:opacity-50"
+            />
+            <button
+              type="submit"
+              disabled={!localValue.trim() || isChatDisabled}
+              className="w-10 h-10 rounded-full bg-[#F95F4A] text-white flex items-center justify-center disabled:opacity-30 active:scale-95 transition-transform"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </form>
         </div>
       </div>
     </div>

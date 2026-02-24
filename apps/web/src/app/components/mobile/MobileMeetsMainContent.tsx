@@ -978,7 +978,7 @@ function MobileMeetsMainContent({
       {/* Controls bar */}
       {!isWebinarAttendee && browserAudioNeedsGesture && (
         <div className="px-4 mt-2 text-[11px] text-[#F95F4A]/70 text-center uppercase tracking-[0.4em]">
-          Tap “Shared browser audio” to unlock the system sound.
+          Tap "Shared browser audio" to unlock the system sound.
         </div>
       )}
       <MobileControlsBar
