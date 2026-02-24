@@ -1022,7 +1022,7 @@ export function MeetScreen({
 
   const handleRetryPermissions = useCallback(async () => {
     if (Platform.OS === "ios") {
-      Linking.openSettings().catch(() => {});
+      Linking.openSettings().catch(() => { });
       return;
     }
     try {
@@ -1047,7 +1047,7 @@ export function MeetScreen({
           if (
             owner.roomId &&
             owner.roomId.trim().toLowerCase() ===
-              normalizedRoomId.toLowerCase()
+            normalizedRoomId.toLowerCase()
           ) {
             return false;
           }
@@ -1382,426 +1382,428 @@ export function MeetScreen({
     >
       <View className="flex-1 bg-[#0d0e0d]">
         <StatusBar style="light" />
-      {isJoined && meetError ? (
-        <ErrorSheet
-          visible={!!meetError}
-          meetError={meetError}
-          onDismiss={() => setMeetError(null)}
-          autoDismissMs={6000}
-          primaryActionLabel={
-            meetError.code === "PERMISSION_DENIED"
-              ? Platform.OS === "ios"
-                ? "Open Settings"
-                : "Retry Permissions"
-              : meetError.code === "MEDIA_ERROR"
-                ? "Retry Devices"
-                : undefined
-          }
-          onPrimaryAction={
-            meetError.code === "PERMISSION_DENIED" ||
-              meetError.code === "MEDIA_ERROR"
-              ? meetError.code === "PERMISSION_DENIED"
-                ? handleRetryPermissions
-                : async () => {
-                  try {
-                    await requestMediaPermissions({ forceVideo: true });
-                  } catch (err) {
-                    setMeetError(createMeetError(err));
+        {isJoined && meetError ? (
+          <ErrorSheet
+            visible={!!meetError}
+            meetError={meetError}
+            onDismiss={() => setMeetError(null)}
+            autoDismissMs={6000}
+            primaryActionLabel={
+              meetError.code === "PERMISSION_DENIED"
+                ? Platform.OS === "ios"
+                  ? "Open Settings"
+                  : "Retry Permissions"
+                : meetError.code === "MEDIA_ERROR"
+                  ? "Retry Devices"
+                  : undefined
+            }
+            onPrimaryAction={
+              meetError.code === "PERMISSION_DENIED" ||
+                meetError.code === "MEDIA_ERROR"
+                ? meetError.code === "PERMISSION_DENIED"
+                  ? handleRetryPermissions
+                  : async () => {
+                    try {
+                      await requestMediaPermissions({ forceVideo: true });
+                    } catch (err) {
+                      setMeetError(createMeetError(err));
+                    }
                   }
-                }
-              : undefined
-          }
-        />
-      ) : null}
+                : undefined
+            }
+          />
+        ) : null}
 
-      {!isJoined && !hasActiveCall ? (
-        hideJoinUI ? (
-          <View className="flex-1 items-center justify-center px-6">
-            <View className="rounded-2xl border border-white/10 bg-black/50 px-6 py-5">
-              <Text className="text-sm font-medium text-[#FEFCD9]">
-                {isLoading ? "Joining webinar..." : "Preparing webinar..."}
-              </Text>
-              {meetError ? (
-                <Text className="mt-2 text-xs text-[#F95F4A]">
-                  {meetError.message}
+        {!isJoined && !hasActiveCall ? (
+          hideJoinUI ? (
+            <View className="flex-1 items-center justify-center px-6">
+              <View className="rounded-2xl border border-white/10 bg-black/50 px-6 py-5">
+                <Text className="text-sm font-medium text-[#FEFCD9]">
+                  {isLoading ? "Joining webinar..." : "Preparing webinar..."}
                 </Text>
-              ) : null}
+                {meetError ? (
+                  <Text className="mt-2 text-xs text-[#F95F4A]">
+                    {meetError.message}
+                  </Text>
+                ) : null}
+              </View>
             </View>
-          </View>
+          ) : (
+            <JoinScreen
+              roomId={roomId}
+              onRoomIdChange={setRoomId}
+              onJoinRoom={handleJoin}
+              onIsAdminChange={setIsAdmin}
+              user={currentUser}
+              onUserChange={handleUserChange}
+              isLoading={isLoading}
+              displayNameInput={displayNameInput}
+              onDisplayNameInputChange={setDisplayNameInput}
+              isMuted={isMuted}
+              isCameraOff={isCameraOff}
+              localStream={localStream}
+              onToggleMute={toggleMute}
+              onToggleCamera={toggleCamera}
+              showPermissionHint={showPermissionHint}
+              hasAudioPermission={mediaState.hasAudioPermission}
+              hasVideoPermission={mediaState.hasVideoPermission}
+              permissionsReady={mediaState.permissionsReady}
+              meetError={meetError}
+              onDismissMeetError={() => setMeetError(null)}
+              onRetryMedia={handleRetryPermissions}
+              onRequestMedia={handleRequestPermissions}
+              forceJoinOnly={hideJoinUI || joinMode === "webinar_attendee"}
+            />
+          )
         ) : (
-          <JoinScreen
+          <CallScreen
             roomId={roomId}
-            onRoomIdChange={setRoomId}
-            onJoinRoom={handleJoin}
-            onIsAdminChange={setIsAdmin}
-            user={currentUser}
-            onUserChange={handleUserChange}
-            isLoading={isLoading}
-            displayNameInput={displayNameInput}
-            onDisplayNameInputChange={setDisplayNameInput}
+            connectionState={connectionState}
+            serverRestartNotice={serverRestartNotice}
+            participants={participants}
+            localParticipant={localParticipant}
+            presentationStream={presentationStream}
+            presenterName={presenterName}
             isMuted={isMuted}
             isCameraOff={isCameraOff}
-            localStream={localStream}
+            isHandRaised={isHandRaised}
+            isScreenSharing={isScreenSharing}
+            isChatOpen={isChatOpen}
+            unreadCount={unreadCount}
+            isMirrorCamera={isMirrorCamera}
+            activeSpeakerId={effectiveActiveSpeakerId}
+            resolveDisplayName={resolveDisplayName}
             onToggleMute={toggleMute}
             onToggleCamera={toggleCamera}
-            showPermissionHint={showPermissionHint}
-            hasAudioPermission={mediaState.hasAudioPermission}
-            hasVideoPermission={mediaState.hasVideoPermission}
-            permissionsReady={mediaState.permissionsReady}
-            meetError={meetError}
-            onDismissMeetError={() => setMeetError(null)}
-            onRetryMedia={handleRetryPermissions}
-            onRequestMedia={handleRequestPermissions}
-            forceJoinOnly={hideJoinUI || joinMode === "webinar_attendee"}
+            onToggleScreenShare={handleToggleScreenShare}
+            onToggleHandRaised={toggleHandRaised}
+            onToggleChat={handleToggleChat}
+            onToggleParticipants={() => {
+              if (isWebinarSession) return;
+              if (isChatOpen) toggleChat();
+              setIsReactionSheetOpen(false);
+              setIsSettingsSheetOpen(false);
+              setIsParticipantsOpen((prev) => !prev);
+            }}
+            onToggleRoomLock={(locked) => {
+              socket.toggleRoomLock?.(locked);
+            }}
+            onToggleNoGuests={(noGuests) => {
+              socket.toggleNoGuests?.(noGuests);
+            }}
+            onToggleChatLock={(locked) => {
+              socket.toggleChatLock?.(locked);
+            }}
+            onToggleTtsDisabled={(disabled) => {
+              socket.toggleTtsDisabled?.(disabled);
+            }}
+            onToggleDmEnabled={(enabled) => {
+              socket.toggleDmEnabled?.(enabled);
+            }}
+            onSendReaction={(emoji) => {
+              sendReaction({ kind: "emoji", id: emoji, value: emoji, label: emoji });
+            }}
+            onOpenSettings={() => {
+              if (isTablet) return;
+              if (isChatOpen) toggleChat();
+              setIsParticipantsOpen(false);
+              setIsReactionSheetOpen(false);
+              setIsSettingsSheetOpen(true);
+            }}
+            onLeave={handleLeave}
+            isAdmin={isAdmin}
+            isObserverMode={isWebinarAttendee}
+            isRoomLocked={isRoomLocked}
+            isNoGuests={isNoGuests}
+            isChatLocked={isChatLocked}
+            isTtsDisabled={isTtsDisabled}
+            isDmEnabled={isDmEnabled}
+            pendingUsersCount={pendingUsers.size}
+            webinarConfig={webinarConfig}
+            webinarSpeakerUserId={webinarSpeakerUserId}
           />
-        )
-      ) : (
-        <CallScreen
-          roomId={roomId}
-          connectionState={connectionState}
-          serverRestartNotice={serverRestartNotice}
-          participants={participants}
-          localParticipant={localParticipant}
-          presentationStream={presentationStream}
-          presenterName={presenterName}
-          isMuted={isMuted}
-          isCameraOff={isCameraOff}
-          isHandRaised={isHandRaised}
-          isScreenSharing={isScreenSharing}
-          isChatOpen={isChatOpen}
-          unreadCount={unreadCount}
-          isMirrorCamera={isMirrorCamera}
-          activeSpeakerId={effectiveActiveSpeakerId}
-          resolveDisplayName={resolveDisplayName}
-          onToggleMute={toggleMute}
-          onToggleCamera={toggleCamera}
-          onToggleScreenShare={handleToggleScreenShare}
-          onToggleHandRaised={toggleHandRaised}
-          onToggleChat={handleToggleChat}
-          onToggleParticipants={() => {
-            if (isWebinarSession) return;
-            if (isChatOpen) toggleChat();
-            setIsReactionSheetOpen(false);
-            setIsSettingsSheetOpen(false);
-            setIsParticipantsOpen((prev) => !prev);
-          }}
-          onToggleRoomLock={(locked) => {
-            socket.toggleRoomLock?.(locked);
-          }}
-          onToggleNoGuests={(noGuests) => {
-            socket.toggleNoGuests?.(noGuests);
-          }}
-          onToggleChatLock={(locked) => {
-            socket.toggleChatLock?.(locked);
-          }}
-          onToggleTtsDisabled={(disabled) => {
-            socket.toggleTtsDisabled?.(disabled);
-          }}
-          onToggleDmEnabled={(enabled) => {
-            socket.toggleDmEnabled?.(enabled);
-          }}
-          onSendReaction={(emoji) => {
-            sendReaction({ kind: "emoji", id: emoji, value: emoji, label: emoji });
-          }}
-          onOpenSettings={() => {
-            if (isTablet) return;
-            if (isChatOpen) toggleChat();
-            setIsParticipantsOpen(false);
-            setIsReactionSheetOpen(false);
-            setIsSettingsSheetOpen(true);
-          }}
-          onLeave={handleLeave}
-          isAdmin={isAdmin}
-          isObserverMode={isWebinarAttendee}
-          isRoomLocked={isRoomLocked}
-          isNoGuests={isNoGuests}
-          isChatLocked={isChatLocked}
-          isTtsDisabled={isTtsDisabled}
-          isDmEnabled={isDmEnabled}
-          pendingUsersCount={pendingUsers.size}
-          webinarConfig={webinarConfig}
-          webinarSpeakerUserId={webinarSpeakerUserId}
-        />
-      )}
+        )}
 
-      {isJoined ? (
-        <ReactionOverlay
-          reactions={reactions}
-          currentUserId={userId}
-          resolveDisplayName={resolveDisplayName}
-        />
-      ) : null}
+        {isJoined ? (
+          <ReactionOverlay
+            reactions={reactions}
+            currentUserId={userId}
+            resolveDisplayName={resolveDisplayName}
+          />
+        ) : null}
 
-      {isJoined && !isWebinarAttendee ? (
-        <ChatPanel
-          visible={isChatOpen}
-          messages={chatMessages}
-          input={chatInput}
-          onInputChange={setChatInput}
-          onSend={sendChat}
-          onClose={() => {
-            if (isChatOpen) toggleChat();
-          }}
-          currentUserId={userId}
-          isGhostMode={effectiveGhostMode}
-          isChatLocked={isChatLocked}
-          isAdmin={isAdmin}
-          resolveDisplayName={resolveDisplayName}
-        />
-      ) : null}
+        {isJoined && !isWebinarAttendee ? (
+          <ChatPanel
+            visible={isChatOpen}
+            messages={chatMessages}
+            input={chatInput}
+            onInputChange={setChatInput}
+            onSend={sendChat}
+            onClose={() => {
+              if (isChatOpen) toggleChat();
+            }}
+            currentUserId={userId}
+            isGhostMode={effectiveGhostMode}
+            isChatLocked={isChatLocked}
+            isDmEnabled={isDmEnabled}
+            isAdmin={isAdmin}
+            resolveDisplayName={resolveDisplayName}
+            participants={Array.from(participants.values())}
+          />
+        ) : null}
 
-      {Platform.OS === "ios" ? (
-        <ScreenSharePicker
-          ref={screenSharePickerRef}
-          style={styles.screenSharePicker}
-        />
-      ) : null}
+        {Platform.OS === "ios" ? (
+          <ScreenSharePicker
+            ref={screenSharePickerRef}
+            style={styles.screenSharePicker}
+          />
+        ) : null}
 
-      {isJoined && !isWebinarSession ? (
-        <ParticipantsPanel
-          visible={isParticipantsOpen}
-          localParticipant={localParticipant}
-          currentUserId={userId}
-          participants={Array.from(participants.values())}
-          resolveDisplayName={resolveDisplayName}
-          onClose={() => setIsParticipantsOpen(false)}
-          pendingUsers={pendingUsers}
-          isAdmin={isAdmin}
-          hostUserId={hostUserId}
-          hostUserIds={hostUserIds}
-          onAdmitPendingUser={(pendingUserId) => {
-            socket.admitUser?.(pendingUserId);
-            setPendingUsers((prev) => {
-              const next = new Map(prev);
-              next.delete(pendingUserId);
-              return next;
-            });
-          }}
-          onRejectPendingUser={(pendingUserId) => {
-            socket.rejectUser?.(pendingUserId);
-            setPendingUsers((prev) => {
-              const next = new Map(prev);
-              next.delete(pendingUserId);
-              return next;
-            });
-          }}
-          onPromoteHost={(targetUserId) =>
-            socket.promoteHost?.(targetUserId) ?? Promise.resolve(false)
-          }
-        />
-      ) : null}
+        {isJoined && !isWebinarSession ? (
+          <ParticipantsPanel
+            visible={isParticipantsOpen}
+            localParticipant={localParticipant}
+            currentUserId={userId}
+            participants={Array.from(participants.values())}
+            resolveDisplayName={resolveDisplayName}
+            onClose={() => setIsParticipantsOpen(false)}
+            pendingUsers={pendingUsers}
+            isAdmin={isAdmin}
+            hostUserId={hostUserId}
+            hostUserIds={hostUserIds}
+            onAdmitPendingUser={(pendingUserId) => {
+              socket.admitUser?.(pendingUserId);
+              setPendingUsers((prev) => {
+                const next = new Map(prev);
+                next.delete(pendingUserId);
+                return next;
+              });
+            }}
+            onRejectPendingUser={(pendingUserId) => {
+              socket.rejectUser?.(pendingUserId);
+              setPendingUsers((prev) => {
+                const next = new Map(prev);
+                next.delete(pendingUserId);
+                return next;
+              });
+            }}
+            onPromoteHost={(targetUserId) =>
+              socket.promoteHost?.(targetUserId) ?? Promise.resolve(false)
+            }
+          />
+        ) : null}
 
-      {isJoined && !isWebinarAttendee ? (
-        <ReactionSheet
-          visible={isReactionSheetOpen}
-          options={reactionOptions}
-          onSelect={(reaction) => {
-            sendReaction(reaction);
-            setIsReactionSheetOpen(false);
-          }}
-          onClose={() => setIsReactionSheetOpen(false)}
-        />
-      ) : null}
+        {isJoined && !isWebinarAttendee ? (
+          <ReactionSheet
+            visible={isReactionSheetOpen}
+            options={reactionOptions}
+            onSelect={(reaction) => {
+              sendReaction(reaction);
+              setIsReactionSheetOpen(false);
+            }}
+            onClose={() => setIsReactionSheetOpen(false)}
+          />
+        ) : null}
 
-      {isJoined && !isTablet && !isWebinarAttendee ? (
-        <SettingsSheet
-          visible={isSettingsSheetOpen}
-          isHandRaised={isHandRaised}
-          isRoomLocked={isRoomLocked}
-          isNoGuests={isNoGuests}
-          isChatLocked={isChatLocked}
-          isTtsDisabled={isTtsDisabled}
-          isDmEnabled={isDmEnabled}
-          isAdmin={isAdmin}
-          selectedAudioInputDeviceId={selectedAudioInputDeviceId}
-          selectedAudioOutputDeviceId={selectedAudioOutputDeviceId}
-          meetingRequiresInviteCode={meetingRequiresInviteCode}
-          webinarConfig={webinarConfig}
-          webinarLink={webinarLink}
-          onSetWebinarLink={setWebinarLink}
-          onGetMeetingConfig={socket.getMeetingConfig}
-          onUpdateMeetingConfig={socket.updateMeetingConfig}
-          onGetWebinarConfig={socket.getWebinarConfig}
-          onUpdateWebinarConfig={socket.updateWebinarConfig}
-          onGenerateWebinarLink={socket.generateWebinarLink}
-          onRotateWebinarLink={socket.rotateWebinarLink}
-          onOpenDisplayName={() => {
-            setIsSettingsSheetOpen(false);
-            setIsDisplayNameSheetOpen(true);
-          }}
-          onToggleHandRaised={() => {
-            setIsSettingsSheetOpen(false);
-            toggleHandRaised();
-          }}
-          onToggleRoomLock={(locked) => {
-            setIsSettingsSheetOpen(false);
-            socket.toggleRoomLock?.(locked);
-          }}
-          onToggleNoGuests={(noGuests) => {
-            setIsSettingsSheetOpen(false);
-            socket.toggleNoGuests?.(noGuests);
-          }}
-          onToggleChatLock={(locked) => {
-            setIsSettingsSheetOpen(false);
-            socket.toggleChatLock?.(locked);
-          }}
-          onToggleTtsDisabled={(disabled) => {
-            setIsSettingsSheetOpen(false);
-            socket.toggleTtsDisabled?.(disabled);
-          }}
-          onToggleDmEnabled={(enabled) => {
-            setIsSettingsSheetOpen(false);
-            socket.toggleDmEnabled?.(enabled);
-          }}
-          onAudioInputDeviceChange={handleAudioInputDeviceChange}
-          onAudioOutputDeviceChange={handleAudioOutputDeviceChange}
-          onClose={() => setIsSettingsSheetOpen(false)}
-        />
-      ) : null}
+        {isJoined && !isTablet && !isWebinarAttendee ? (
+          <SettingsSheet
+            visible={isSettingsSheetOpen}
+            isHandRaised={isHandRaised}
+            isRoomLocked={isRoomLocked}
+            isNoGuests={isNoGuests}
+            isChatLocked={isChatLocked}
+            isTtsDisabled={isTtsDisabled}
+            isDmEnabled={isDmEnabled}
+            isAdmin={isAdmin}
+            selectedAudioInputDeviceId={selectedAudioInputDeviceId}
+            selectedAudioOutputDeviceId={selectedAudioOutputDeviceId}
+            meetingRequiresInviteCode={meetingRequiresInviteCode}
+            webinarConfig={webinarConfig}
+            webinarLink={webinarLink}
+            onSetWebinarLink={setWebinarLink}
+            onGetMeetingConfig={socket.getMeetingConfig}
+            onUpdateMeetingConfig={socket.updateMeetingConfig}
+            onGetWebinarConfig={socket.getWebinarConfig}
+            onUpdateWebinarConfig={socket.updateWebinarConfig}
+            onGenerateWebinarLink={socket.generateWebinarLink}
+            onRotateWebinarLink={socket.rotateWebinarLink}
+            onOpenDisplayName={() => {
+              setIsSettingsSheetOpen(false);
+              setIsDisplayNameSheetOpen(true);
+            }}
+            onToggleHandRaised={() => {
+              setIsSettingsSheetOpen(false);
+              toggleHandRaised();
+            }}
+            onToggleRoomLock={(locked) => {
+              setIsSettingsSheetOpen(false);
+              socket.toggleRoomLock?.(locked);
+            }}
+            onToggleNoGuests={(noGuests) => {
+              setIsSettingsSheetOpen(false);
+              socket.toggleNoGuests?.(noGuests);
+            }}
+            onToggleChatLock={(locked) => {
+              setIsSettingsSheetOpen(false);
+              socket.toggleChatLock?.(locked);
+            }}
+            onToggleTtsDisabled={(disabled) => {
+              setIsSettingsSheetOpen(false);
+              socket.toggleTtsDisabled?.(disabled);
+            }}
+            onToggleDmEnabled={(enabled) => {
+              setIsSettingsSheetOpen(false);
+              socket.toggleDmEnabled?.(enabled);
+            }}
+            onAudioInputDeviceChange={handleAudioInputDeviceChange}
+            onAudioOutputDeviceChange={handleAudioOutputDeviceChange}
+            onClose={() => setIsSettingsSheetOpen(false)}
+          />
+        ) : null}
 
-      {isJoined ? (
-        <DisplayNameSheet
-          visible={isDisplayNameSheetOpen}
-          value={displayNameInput}
-          onChange={setDisplayNameInput}
-          onSubmit={handleDisplayNameSubmit}
-          onClose={() => setIsDisplayNameSheetOpen(false)}
-          canSubmit={canUpdateDisplayName}
-          isUpdating={isDisplayNameUpdating}
-          status={displayNameStatus}
-        />
-      ) : null}
+        {isJoined ? (
+          <DisplayNameSheet
+            visible={isDisplayNameSheetOpen}
+            value={displayNameInput}
+            onChange={setDisplayNameInput}
+            onSubmit={handleDisplayNameSubmit}
+            onClose={() => setIsDisplayNameSheetOpen(false)}
+            canSubmit={canUpdateDisplayName}
+            isUpdating={isDisplayNameUpdating}
+            status={displayNameStatus}
+          />
+        ) : null}
 
-      {isJoined && isAdmin && pendingToast ? (
-        <PendingJoinToast
-          visible
-          displayName={pendingToast.displayName}
-          count={pendingToast.count}
-          onAdmit={() => {
-            socket.admitUser?.(pendingToast.userId);
-            setPendingUsers((prev) => {
-              const next = new Map(prev);
-              next.delete(pendingToast.userId);
-              return next;
-            });
-            dismissPendingToast();
-          }}
-          onReject={() => {
-            socket.rejectUser?.(pendingToast.userId);
-            setPendingUsers((prev) => {
-              const next = new Map(prev);
-              next.delete(pendingToast.userId);
-              return next;
-            });
-            dismissPendingToast();
-          }}
-        />
-      ) : null}
+        {isJoined && isAdmin && pendingToast ? (
+          <PendingJoinToast
+            visible
+            displayName={pendingToast.displayName}
+            count={pendingToast.count}
+            onAdmit={() => {
+              socket.admitUser?.(pendingToast.userId);
+              setPendingUsers((prev) => {
+                const next = new Map(prev);
+                next.delete(pendingToast.userId);
+                return next;
+              });
+              dismissPendingToast();
+            }}
+            onReject={() => {
+              socket.rejectUser?.(pendingToast.userId);
+              setPendingUsers((prev) => {
+                const next = new Map(prev);
+                next.delete(pendingToast.userId);
+                return next;
+              });
+              dismissPendingToast();
+            }}
+          />
+        ) : null}
 
-      {connectionState === "waiting" && waitingMessage ? (
-        <View className="absolute inset-0 bg-black/70 items-center justify-center px-6">
-          <View className="bg-neutral-900 border border-white/10 rounded-3xl px-6 py-5">
-            <View className="gap-2">
+        {connectionState === "waiting" && waitingMessage ? (
+          <View className="absolute inset-0 bg-black/70 items-center justify-center px-6">
+            <View className="bg-neutral-900 border border-white/10 rounded-3xl px-6 py-5">
               <View className="gap-2">
-                <Text className="text-base font-semibold text-[#FEFCD9]" selectable>
-                  {waitingMessage}
-                </Text>
-                <Text className="text-xs text-[#FEFCD9]/60">
-                  We’ll let you in as soon as the host admits you.
-                </Text>
+                <View className="gap-2">
+                  <Text className="text-base font-semibold text-[#FEFCD9]" selectable>
+                    {waitingMessage}
+                  </Text>
+                  <Text className="text-xs text-[#FEFCD9]/60">
+                    We’ll let you in as soon as the host admits you.
+                  </Text>
+                </View>
               </View>
             </View>
           </View>
-        </View>
-      ) : null}
+        ) : null}
 
-      {isInviteCodePromptOpen ? (
-        <View className="absolute inset-0 bg-black/75 items-center justify-center px-6">
-          <View className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#111111] p-5">
-            <Text className="text-base font-semibold text-[#FEFCD9]">
-              {inviteCodePromptMode === "meeting"
-                ? "Meeting invite code"
-                : "Webinar invite code"}
-            </Text>
-            <Text className="mt-1 text-xs text-[#FEFCD9]/60">
-              {inviteCodePromptMode === "meeting"
-                ? "This meeting requires an invite code."
-                : "This webinar requires an invite code."}
-            </Text>
-            <TextInput
-              value={inviteCodeInput}
-              onChangeText={(value) => {
-                setInviteCodeInput(value);
-                if (inviteCodePromptError) {
-                  setInviteCodePromptError(null);
-                }
-              }}
-              autoFocus
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder="Invite code"
-              placeholderTextColor="rgba(254,252,217,0.35)"
-              className="mt-4 rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-[#FEFCD9]"
-              onSubmitEditing={handleSubmitInviteCodePrompt}
-              returnKeyType="done"
-            />
-            {inviteCodePromptError ? (
-              <Text className="mt-2 text-xs text-[#F95F4A]">
-                {inviteCodePromptError}
+        {isInviteCodePromptOpen ? (
+          <View className="absolute inset-0 bg-black/75 items-center justify-center px-6">
+            <View className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#111111] p-5">
+              <Text className="text-base font-semibold text-[#FEFCD9]">
+                {inviteCodePromptMode === "meeting"
+                  ? "Meeting invite code"
+                  : "Webinar invite code"}
               </Text>
-            ) : null}
-            <View className="mt-4 flex-row items-center justify-end gap-2">
-              <Pressable
-                onPress={handleCancelInviteCodePrompt}
-                className="rounded-xl border border-white/15 px-3 py-2"
-              >
-                <Text className="text-xs uppercase tracking-[0.14em] text-[#FEFCD9]/70">
-                  Cancel
+              <Text className="mt-1 text-xs text-[#FEFCD9]/60">
+                {inviteCodePromptMode === "meeting"
+                  ? "This meeting requires an invite code."
+                  : "This webinar requires an invite code."}
+              </Text>
+              <TextInput
+                value={inviteCodeInput}
+                onChangeText={(value) => {
+                  setInviteCodeInput(value);
+                  if (inviteCodePromptError) {
+                    setInviteCodePromptError(null);
+                  }
+                }}
+                autoFocus
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="Invite code"
+                placeholderTextColor="rgba(254,252,217,0.35)"
+                className="mt-4 rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-[#FEFCD9]"
+                onSubmitEditing={handleSubmitInviteCodePrompt}
+                returnKeyType="done"
+              />
+              {inviteCodePromptError ? (
+                <Text className="mt-2 text-xs text-[#F95F4A]">
+                  {inviteCodePromptError}
                 </Text>
-              </Pressable>
-              <Pressable
-                onPress={handleSubmitInviteCodePrompt}
-                className="rounded-xl bg-[#F95F4A] px-3 py-2"
-              >
-                <Text className="text-xs uppercase tracking-[0.14em] text-white">
-                  Continue
-                </Text>
-              </Pressable>
+              ) : null}
+              <View className="mt-4 flex-row items-center justify-end gap-2">
+                <Pressable
+                  onPress={handleCancelInviteCodePrompt}
+                  className="rounded-xl border border-white/15 px-3 py-2"
+                >
+                  <Text className="text-xs uppercase tracking-[0.14em] text-[#FEFCD9]/70">
+                    Cancel
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleSubmitInviteCodePrompt}
+                  className="rounded-xl bg-[#F95F4A] px-3 py-2"
+                >
+                  <Text className="text-xs uppercase tracking-[0.14em] text-white">
+                    Continue
+                  </Text>
+                </Pressable>
+              </View>
             </View>
           </View>
-        </View>
-      ) : null}
+        ) : null}
 
-      {isTakeoverPromptOpen ? (
-        <View className="absolute inset-0 bg-black/75 items-center justify-center px-6">
-          <View className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#111111] p-5">
-            <Text className="text-base font-semibold text-[#FEFCD9]">
-              Join new meeting?
-            </Text>
-            <Text className="mt-1 text-xs text-[#FEFCD9]/60">
-              You are currently in {takeoverPromptRoomLabel}. Leave it and join this one?
-            </Text>
-            <View className="mt-4 flex-row items-center justify-end gap-2">
-              <Pressable
-                onPress={handleTakeoverPromptStay}
-                className="rounded-xl border border-white/15 px-3 py-2"
-              >
-                <Text className="text-xs uppercase tracking-[0.14em] text-[#FEFCD9]/70">
-                  Stay
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={handleTakeoverPromptJoin}
-                className="rounded-xl bg-[#F95F4A] px-3 py-2"
-              >
-                <Text className="text-xs uppercase tracking-[0.14em] text-white">
-                  Leave & Join
-                </Text>
-              </Pressable>
+        {isTakeoverPromptOpen ? (
+          <View className="absolute inset-0 bg-black/75 items-center justify-center px-6">
+            <View className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#111111] p-5">
+              <Text className="text-base font-semibold text-[#FEFCD9]">
+                Join new meeting?
+              </Text>
+              <Text className="mt-1 text-xs text-[#FEFCD9]/60">
+                You are currently in {takeoverPromptRoomLabel}. Leave it and join this one?
+              </Text>
+              <View className="mt-4 flex-row items-center justify-end gap-2">
+                <Pressable
+                  onPress={handleTakeoverPromptStay}
+                  className="rounded-xl border border-white/15 px-3 py-2"
+                >
+                  <Text className="text-xs uppercase tracking-[0.14em] text-[#FEFCD9]/70">
+                    Stay
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleTakeoverPromptJoin}
+                  className="rounded-xl bg-[#F95F4A] px-3 py-2"
+                >
+                  <Text className="text-xs uppercase tracking-[0.14em] text-white">
+                    Leave & Join
+                  </Text>
+                </Pressable>
+              </View>
             </View>
           </View>
-        </View>
-      ) : null}
+        ) : null}
       </View>
     </AppsProvider>
   );

@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ChatMessage } from "../types";
+import type { Participant } from "../types";
 import { TrueSheet } from "@lodev09/react-native-true-sheet";
 import { FlatList, Pressable, Text, TextInput, View } from "@/tw";
 import { SHEET_COLORS, SHEET_THEME } from "./true-sheet-theme";
@@ -76,6 +77,10 @@ const MessageRow = memo(function MessageRow({
     ]).start();
   }, [isNew, opacity, scale, translateY]);
 
+
+  
+  const displayContent = item.content;
+
   return (
     <Animated.View style={{ opacity, transform: [{ translateY }, { scale }] }}>
       {actionText ? (
@@ -101,13 +106,14 @@ const MessageRow = memo(function MessageRow({
             style={[
               styles.messageBubble,
               isOwn ? styles.bubbleOwn : styles.bubbleOther,
+              item.isDirect ? styles.bubbleDm : null,
             ]}
           >
             {directMessageLabel ? (
               <Text style={styles.dmLabel}>{directMessageLabel}</Text>
             ) : null}
             <Text style={[styles.messageText, isOwn && styles.messageTextOwn]}>
-              {item.content}
+              {displayContent}
             </Text>
           </View>
           <Text style={styles.messageTimestamp}>{timestamp}</Text>
@@ -129,6 +135,10 @@ const ChatFooter = memo(function ChatFooter({
   commandSuggestions,
   activeCommandIndex,
   onPickCommand,
+  showMentionSuggestions,
+  mentionSuggestions,
+  onPickMention,
+  isDmEnabled,
 }: {
   inputValue: string;
   onInputChange: (value: string) => void;
@@ -141,6 +151,10 @@ const ChatFooter = memo(function ChatFooter({
   commandSuggestions: CommandSuggestion[];
   activeCommandIndex: number;
   onPickCommand: (text: string) => void;
+  showMentionSuggestions: boolean;
+  mentionSuggestions: { userId: string; displayName: string }[];
+  onPickMention: (displayName: string) => void;
+  isDmEnabled: boolean;
 }) {
   const isChatDisabled = isGhostMode || (isChatLocked && !isAdmin);
   return (
@@ -178,6 +192,27 @@ const ChatFooter = memo(function ChatFooter({
           />
         </View>
       ) : null}
+      {showMentionSuggestions && isDmEnabled ? (
+        <View style={styles.commandContainer}>
+          <View style={styles.mentionHeader}>
+            <Text style={styles.mentionHeaderText}>💬 Private message to...</Text>
+          </View>
+          <RNFlatList
+            data={mentionSuggestions}
+            keyExtractor={(item) => item.userId}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <Pressable
+                onPress={() => onPickMention(item.displayName)}
+                style={styles.commandRow}
+              >
+                <Text style={styles.commandLabel}>{item.displayName}</Text>
+              </Pressable>
+            )}
+          />
+        </View>
+      ) : null}
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
@@ -186,7 +221,9 @@ const ChatFooter = memo(function ChatFooter({
               ? "Ghost mode: chat disabled"
               : isChatLocked && !isAdmin
                 ? "Chat locked by host"
-                : "Type a message or /..."
+                : isDmEnabled
+                  ? "Message or @name for DM..."
+                  : "Type a message or /..."
           }
           placeholderTextColor={SHEET_COLORS.textFaint}
           value={inputValue}
@@ -217,10 +254,17 @@ interface ChatPanelProps {
   currentUserId: string;
   isGhostMode: boolean;
   isChatLocked: boolean;
+  isDmEnabled?: boolean;
   isAdmin: boolean;
   resolveDisplayName: (userId: string) => string;
+  participants?: Participant[];
   visible?: boolean;
 }
+
+// Mirrors the server's normalizeLookupToken so the mention token we insert
+// is always resolvable server-side.
+const normalizeMentionToken = (displayName: string): string =>
+  displayName.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "");
 
 export function ChatPanel({
   messages,
@@ -231,8 +275,10 @@ export function ChatPanel({
   currentUserId,
   isGhostMode,
   isChatLocked,
+  isDmEnabled = true,
   isAdmin,
   resolveDisplayName,
+  participants = [],
   visible = true,
 }: ChatPanelProps) {
   const insets = useSafeAreaInsets();
@@ -257,7 +303,8 @@ export function ChatPanel({
 
   const handleSend = useCallback(() => {
     if (!localValue.trim() || isChatDisabled) return;
-    onSend(localValue);
+    const trimmed = localValue.trim();
+    onSend(trimmed);
     setLocalValue("");
     onInputChange("");
   }, [localValue, onSend, onInputChange, isChatDisabled]);
@@ -276,6 +323,35 @@ export function ChatPanel({
     !isChatDisabled && localValue.startsWith("/") && commandSuggestions.length > 0;
   const isPickingCommand =
     showCommandSuggestions && !localValue.slice(1).includes(" ");
+
+  // @mention DM autocomplete
+  const mentionQuery = useMemo(() => {
+    if (!localValue.startsWith("@")) return null;
+    const afterAt = localValue.slice(1);
+    if (afterAt.includes(" ")) return null; // already picked, now typing message
+    return afterAt.toLowerCase();
+  }, [localValue]);
+
+  const mentionSuggestions = useMemo(() => {
+    if (mentionQuery === null) return [];
+    return participants
+      .filter((p) => p.userId !== currentUserId)
+      .map((p) => ({
+        userId: p.userId,
+        displayName: resolveDisplayName(p.userId),
+      }))
+      .filter((p) =>
+        mentionQuery === ""
+          ? true
+          : p.displayName.toLowerCase().includes(mentionQuery)
+      );
+  }, [mentionQuery, participants, currentUserId, resolveDisplayName]);
+
+  const showMentionSuggestions =
+    !isChatDisabled &&
+    isDmEnabled &&
+    mentionQuery !== null &&
+    mentionSuggestions.length > 0;
 
   useEffect(() => {
     setActiveCommandIndex(0);
@@ -305,6 +381,7 @@ export function ChatPanel({
     prevMessageIdsRef.current = currentIds;
     return newIds;
   }, [messages]);
+
 
   useEffect(() => {
     if (visible) {
@@ -341,6 +418,7 @@ export function ChatPanel({
           isGhostMode={isGhostMode}
           isChatLocked={isChatLocked}
           isAdmin={isAdmin}
+          isDmEnabled={isDmEnabled}
           inputDockPaddingBottom={inputDockPaddingBottom}
           showCommandSuggestions={showCommandSuggestions}
           commandSuggestions={commandSuggestions}
@@ -348,6 +426,14 @@ export function ChatPanel({
           onPickCommand={(text) => {
             setLocalValue(text);
             onInputChange(text);
+          }}
+          showMentionSuggestions={showMentionSuggestions}
+          mentionSuggestions={mentionSuggestions}
+          onPickMention={(name) => {
+            const token = normalizeMentionToken(name);
+            const next = `@${token} `;
+            setLocalValue(next);
+            onInputChange(next);
           }}
         />
       }
@@ -370,11 +456,10 @@ export function ChatPanel({
                 : resolveDisplayName(item.userId) || item.displayName;
               const directMessageLabel = item.isDirect
                 ? isOwn
-                  ? `Private to ${
-                      item.dmTargetDisplayName ||
-                      resolveDisplayName(item.dmTargetUserId || item.userId)
-                    }`
-                  : "Private message"
+                  ? `Sent privately to ${item.dmTargetDisplayName ||
+                  resolveDisplayName(item.dmTargetUserId || item.userId)
+                  }`
+                  : "Sent privately"
                 : null;
               const timestamp = new Date(item.timestamp).toLocaleTimeString(
                 [],
@@ -496,6 +581,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(42, 42, 42, 0.9)",
     borderBottomLeftRadius: 6,
   },
+  bubbleDm: {
+    borderLeftWidth: 2,
+    borderLeftColor: "rgba(251, 191, 36, 0.5)",
+  },
   messageText: {
     fontSize: 14,
     color: SHEET_COLORS.text,
@@ -526,6 +615,18 @@ const styles = StyleSheet.create({
     letterSpacing: 0.7,
     color: "rgba(251, 191, 36, 0.85)",
     marginBottom: 2,
+  },
+  mentionHeader: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  mentionHeaderText: {
+    fontSize: 10,
+    color: SHEET_COLORS.textFaint,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   commandContainer: {
     maxHeight: 320,
@@ -599,3 +700,4 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
 });
+

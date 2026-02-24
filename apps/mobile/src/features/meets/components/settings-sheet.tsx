@@ -309,7 +309,7 @@ export function SettingsSheet({
     : availableAudioOutputDevices[0]?.deviceId;
 
   const trigger = useCallback((action: () => void) => {
-    Haptics.selectionAsync().catch(() => {});
+    Haptics.selectionAsync().catch(() => { });
     action();
   }, []);
 
