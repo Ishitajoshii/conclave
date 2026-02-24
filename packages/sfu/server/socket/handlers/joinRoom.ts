@@ -206,22 +206,25 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
           !isWebinarAttendeeJoin &&
           Boolean(room.hostUserKey) &&
           room.hostUserKey === userKey;
-        const isHostForExistingRoom =
+        const isPersistedAdminForExistingRoom =
+          !isWebinarAttendeeJoin && room.isAdminUserKey(userKey);
+        const isAdminForExistingRoom =
           !isWebinarAttendeeJoin &&
           (isReturningPrimaryHost ||
+            isPersistedAdminForExistingRoom ||
             (hostRequested &&
               (clientPolicy.allowHostJoin || forcedHostJoin)));
-        const isHost = isWebinarAttendeeJoin
+        const isAdminJoin = isWebinarAttendeeJoin
           ? false
           : createdRoom
             ? true
-            : isHostForExistingRoom;
+            : isAdminForExistingRoom;
 
         const meetingInviteCode = data?.meetingInviteCode?.trim() || "";
         const requiresMeetingInviteCode = room.requiresMeetingInviteCode;
         const shouldValidateMeetingInviteCode =
           !isWebinarAttendeeJoin &&
-          !isHost &&
+          !isAdminJoin &&
           requiresMeetingInviteCode &&
           !wasReconnecting &&
           !existingClient;
@@ -239,7 +242,10 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
           return;
         }
 
-        if (isHost && !room.hostUserKey) {
+        if (isAdminJoin) {
+          room.registerAdminUserKey(userKey);
+        }
+        if (isAdminJoin && !room.hostUserKey) {
           room.hostUserKey = userKey;
         }
         const isPrimaryHost = room.hostUserKey === userKey;
@@ -247,7 +253,7 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
         if (
           !isWebinarAttendeeJoin &&
           room.noGuests &&
-          !isHost &&
+          !isAdminJoin &&
           isGuestUserKey(userKey)
         ) {
           Logger.info(
@@ -257,31 +263,34 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
           return;
         }
 
-        if (isHost) {
-          socket.emit("hostAssigned", { roomId, hostUserId: userId });
+        if (isAdminJoin) {
+          socket.emit("hostAssigned", {
+            roomId,
+            hostUserId: room.getHostUserId() ?? (isPrimaryHost ? userId : null),
+          });
         }
 
-        if (isHostForExistingRoom && room.cleanupTimer) {
+        if (isAdminForExistingRoom && room.cleanupTimer) {
           Logger.info(`Host returning to room ${roomId}, cleanup cancelled.`);
           room.stopCleanupTimer();
         }
 
         const canSetDisplayName = Boolean(
           !isWebinarAttendeeJoin &&
-            (clientPolicy.allowDisplayNameUpdate || isHost),
+            (clientPolicy.allowDisplayNameUpdate || isAdminJoin),
         );
         const requestedDisplayName =
           canSetDisplayName && displayNameCandidate ? displayNameCandidate : "";
         const displayName = requestedDisplayName || identity.displayName;
         const hasDisplayNameOverride = Boolean(requestedDisplayName);
         const isGhost =
-          !isWebinarAttendeeJoin && Boolean(data?.ghost) && Boolean(isHost);
+          !isWebinarAttendeeJoin && Boolean(data?.ghost) && Boolean(isAdminJoin);
         context.currentUserKey = userKey;
 
         if (
           !isWebinarAttendeeJoin &&
           room.isLocked &&
-          !isPrimaryHost &&
+          !isAdminJoin &&
           !room.isLockedAllowed(userKey)
         ) {
           Logger.info(
@@ -314,6 +323,7 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
             existingProducers: [],
             status: "waiting",
             hostUserId: room.getHostUserId(),
+            hostUserIds: room.getAdminUserIds(),
             isLocked: room.isLocked,
             isTtsDisabled: room.isTtsDisabled,
             isDmEnabled: room.isDmEnabled,
@@ -325,7 +335,7 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
         if (
           !isWebinarAttendeeJoin &&
           clientPolicy.useWaitingRoom &&
-          !isHost &&
+          !isAdminJoin &&
           !room.isAllowed(userKey) &&
           !(room.isLocked && room.isLockedAllowed(userKey))
         ) {
@@ -357,6 +367,7 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
             existingProducers: [],
             status: "waiting",
             hostUserId: room.getHostUserId(),
+            hostUserIds: room.getAdminUserIds(),
             isLocked: room.isLocked,
             isTtsDisabled: room.isTtsDisabled,
             isDmEnabled: room.isDmEnabled,
@@ -419,7 +430,7 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
         context.pendingRoomChannelId = null;
         context.pendingUserKey = null;
 
-        if (isHost) {
+        if (isAdminJoin) {
           context.currentClient = new Admin({
             id: userId,
             socket,
@@ -449,6 +460,10 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
         io.to(roomChannelId).emit("hostChanged", {
           roomId: context.currentRoom.id,
           hostUserId: context.currentRoom.getHostUserId(),
+        });
+        io.to(roomChannelId).emit("adminUsersChanged", {
+          roomId: context.currentRoom.id,
+          hostUserIds: context.currentRoom.getAdminUserIds(),
         });
 
         if (context.currentClient instanceof Admin) {
@@ -559,7 +574,7 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
 
         Logger.debug(
           `User ${userId} joined room ${roomId} as ${
-            isHost
+            isAdminJoin
               ? "Host"
               : context.currentClient.isWebinarAttendee
                 ? "WebinarAttendee"
@@ -577,13 +592,14 @@ export const registerJoinRoomHandler = (context: ConnectionContext): void => {
           existingProducers,
           status: "joined",
           hostUserId: context.currentRoom.getHostUserId(),
+          hostUserIds: context.currentRoom.getAdminUserIds(),
           isLocked: context.currentRoom.isLocked,
           isTtsDisabled: context.currentRoom.isTtsDisabled,
           isDmEnabled: context.currentRoom.isDmEnabled,
           meetingRequiresInviteCode: context.currentRoom.requiresMeetingInviteCode,
           webinarRole: context.currentClient.isWebinarAttendee
             ? "attendee"
-            : isHost
+            : isAdminJoin
               ? "host"
               : "participant",
           isWebinarEnabled: webinarSnapshot.enabled,

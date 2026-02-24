@@ -57,6 +57,7 @@ export interface JoinRoomResponse {
   existingProducers: ProducerInfo[];
   status?: "waiting" | "joined";
   hostUserId?: string | null;
+  hostUserIds?: string[];
   isLocked?: boolean;
   isTtsDisabled?: boolean;
   isDmEnabled?: boolean;

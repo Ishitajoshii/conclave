@@ -88,6 +88,7 @@ export class Room {
   public currentScreenShareProducerId: string | null = null;
   public currentQuality: VideoQuality = "standard";
   public userKeysById: Map<string, string> = new Map();
+  public adminUserKeys: Set<string> = new Set();
   public displayNamesByKey: Map<string, string> = new Map();
   public handRaisedByUserId: Set<string> = new Set();
   public lockedAllowedUsers: Set<string> = new Set();
@@ -628,6 +629,39 @@ export class Room {
     return admins;
   }
 
+  getAdminUserIds(): string[] {
+    const userIds: string[] = [];
+    for (const client of this.clients.values()) {
+      if (client instanceof Admin) {
+        userIds.push(client.id);
+      }
+    }
+    return userIds;
+  }
+
+  registerAdminUserKey(userKey: string): void {
+    this.adminUserKeys.add(userKey);
+  }
+
+  isAdminUserKey(userKey: string): boolean {
+    return this.adminUserKeys.has(userKey);
+  }
+
+  promoteClientToAdmin(userId: string): Admin | null {
+    const client = this.clients.get(userId);
+    if (!client || client.isGhost || client.isWebinarAttendee) {
+      return null;
+    }
+    if (!(client instanceof Admin)) {
+      Object.setPrototypeOf(client, Admin.prototype);
+    }
+    const userKey = this.userKeysById.get(userId);
+    if (userKey) {
+      this.adminUserKeys.add(userKey);
+    }
+    return client as Admin;
+  }
+
   getHostUserId(): string | null {
     if (this.hostUserKey) {
       for (const [userId, userKey] of this.userKeysById.entries()) {
@@ -1068,6 +1102,7 @@ export class Room {
     this.webinarFeedRefreshNotifier = null;
     this.router.close();
     this.userKeysById.clear();
+    this.adminUserKeys.clear();
     this.displayNamesByKey.clear();
     this.webinarActiveSpeakerUserId = null;
     this.webinarDominantSpeakerUserId = null;

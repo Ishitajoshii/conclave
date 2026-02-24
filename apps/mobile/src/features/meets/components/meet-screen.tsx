@@ -163,6 +163,8 @@ export function MeetScreen({
     setIsDmEnabled,
     hostUserId,
     setHostUserId,
+    hostUserIds,
+    setHostUserIds,
     meetingRequiresInviteCode,
     setMeetingRequiresInviteCode,
     webinarConfig,
@@ -180,6 +182,7 @@ export function MeetScreen({
     joinMode === "webinar_attendee" || webinarRole === "attendee";
   const isWebinarSession = isWebinarAttendee || Boolean(webinarConfig?.enabled);
   const effectiveGhostMode = isGhostMode || isWebinarAttendee;
+  const [isScreenSharePending, setIsScreenSharePending] = useState(false);
 
   useEffect(() => {
     registerApps([whiteboardApp]);
@@ -189,7 +192,8 @@ export function MeetScreen({
   const isScreenSharingRef = useRef(isScreenSharing);
   const hasActiveCallRef = useRef(false);
   const connectionStateRef = useRef(connectionState);
-  const shouldKeepAliveInBackground = isScreenSharing || !!activeScreenShareId;
+  const shouldKeepAliveInBackground =
+    isScreenSharing || !!activeScreenShareId || isScreenSharePending;
 
   const {
     videoQuality,
@@ -255,7 +259,6 @@ export function MeetScreen({
   const [isAdmin, setIsAdmin] = useState(false);
   const [hasActiveCall, setHasActiveCall] = useState(false);
   const [isDisplayNameSheetOpen, setIsDisplayNameSheetOpen] = useState(false);
-  const [isScreenSharePending, setIsScreenSharePending] = useState(false);
   const screenShareRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
@@ -329,6 +332,7 @@ export function MeetScreen({
     updateVideoQualityRef,
     toggleMute,
     toggleCamera,
+    startScreenShare,
     toggleScreenShare,
     stopScreenShare,
     stopLocalTrack,
@@ -722,6 +726,7 @@ export function MeetScreen({
     setMeetError,
     setWaitingMessage,
     setHostUserId,
+    setHostUserIds,
     setServerRestartNotice,
     setWebinarConfig,
     setWebinarRole,
@@ -1191,7 +1196,21 @@ export function MeetScreen({
 
     if (isScreenSharing) {
       cancelPendingScreenShareStart();
-      void toggleScreenShare();
+      stopScreenShare({ notify: true });
+      return;
+    }
+
+    if (isScreenSharePending) {
+      cancelPendingScreenShareStart();
+      return;
+    }
+
+    if (activeScreenShareId) {
+      setMeetError({
+        code: "UNKNOWN",
+        message: "Someone else is already sharing their screen",
+        recoverable: true,
+      });
       return;
     }
 
@@ -1207,7 +1226,11 @@ export function MeetScreen({
     connectionState,
     showScreenSharePicker,
     toggleScreenShare,
+    stopScreenShare,
     cancelPendingScreenShareStart,
+    activeScreenShareId,
+    isScreenSharePending,
+    setMeetError,
   ]);
 
   useEffect(() => {
@@ -1216,7 +1239,7 @@ export function MeetScreen({
 
     const requestToken = ++screenShareRequestTokenRef.current;
     let attempts = 0;
-    const maxAttempts = 10;
+    const maxAttempts = 12;
     const delayMs = 650;
 
     const schedule = (delay: number) => {
@@ -1239,11 +1262,16 @@ export function MeetScreen({
       }
 
       attempts += 1;
-      await toggleScreenShare();
+      const result = await startScreenShare();
 
       if (screenShareRequestTokenRef.current !== requestToken) return;
 
-      if (isScreenSharingRef.current || attempts >= maxAttempts) {
+      if (result === "started" || isScreenSharingRef.current) {
+        setIsScreenSharePending(false);
+        return;
+      }
+
+      if (result === "blocked" || attempts >= maxAttempts) {
         setIsScreenSharePending(false);
         return;
       }
@@ -1264,7 +1292,7 @@ export function MeetScreen({
   }, [
     isScreenSharePending,
     isScreenSharing,
-    toggleScreenShare,
+    startScreenShare,
     cancelPendingScreenShareStart,
   ]);
 
@@ -1539,6 +1567,8 @@ export function MeetScreen({
           onClose={() => setIsParticipantsOpen(false)}
           pendingUsers={pendingUsers}
           isAdmin={isAdmin}
+          hostUserId={hostUserId}
+          hostUserIds={hostUserIds}
           onAdmitPendingUser={(pendingUserId) => {
             socket.admitUser?.(pendingUserId);
             setPendingUsers((prev) => {
@@ -1555,6 +1585,9 @@ export function MeetScreen({
               return next;
             });
           }}
+          onPromoteHost={(targetUserId) =>
+            socket.promoteHost?.(targetUserId) ?? Promise.resolve(false)
+          }
         />
       ) : null}
 

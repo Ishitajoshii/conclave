@@ -88,6 +88,7 @@ interface UseMeetSocketOptions {
   setMeetError: (error: MeetError | null) => void;
   setWaitingMessage: (message: string | null) => void;
   setHostUserId: (userId: string | null) => void;
+  setHostUserIds: React.Dispatch<React.SetStateAction<string[]>>;
   setServerRestartNotice: (notice: string | null) => void;
   setWebinarConfig: React.Dispatch<
     React.SetStateAction<WebinarConfigSnapshot | null>
@@ -167,6 +168,7 @@ export function useMeetSocket({
   setMeetError,
   setWaitingMessage,
   setHostUserId,
+  setHostUserIds,
   setServerRestartNotice,
   setWebinarConfig,
   setWebinarRole,
@@ -300,6 +302,7 @@ export function useMeetSocket({
       setPendingUsers(new Map());
       setDisplayNames(new Map());
       setHostUserId(null);
+      setHostUserIds([]);
       setWebinarRole(null);
       setWebinarSpeakerUserId(null);
       participantIdsRef.current = new Set([userId]);
@@ -365,6 +368,7 @@ export function useMeetSocket({
       setIsScreenSharing,
       setPendingUsers,
       setHostUserId,
+      setHostUserIds,
       setWebinarRole,
       setWebinarSpeakerUserId,
       setIsTtsDisabled,
@@ -1269,6 +1273,10 @@ export function useMeetSocket({
             if (response.status === "waiting") {
               setConnectionState("waiting");
               setHostUserId(response.hostUserId ?? null);
+              setHostUserIds(
+                response.hostUserIds ??
+                  (response.hostUserId ? [response.hostUserId] : []),
+              );
               setMeetingRequiresInviteCode(
                 response.meetingRequiresInviteCode ?? false,
               );
@@ -1379,6 +1387,10 @@ export function useMeetSocket({
 
               setConnectionState("joined");
               setHostUserId(response.hostUserId ?? null);
+              setHostUserIds(
+                response.hostUserIds ??
+                  (response.hostUserId ? [response.hostUserId] : []),
+              );
               startProducerSync();
               void syncProducers();
               playNotificationSound("join");
@@ -1396,6 +1408,7 @@ export function useMeetSocket({
       setWaitingMessage,
       setConnectionState,
       setHostUserId,
+      setHostUserIds,
       setMeetingRequiresInviteCode,
       setWebinarConfig,
       setWebinarRole,
@@ -1529,6 +1542,11 @@ export function useMeetSocket({
                 if (!isRoomEvent(eventRoomId)) return;
                 setIsAdmin(true);
                 setHostUserId(hostUserId ?? userId);
+                setHostUserIds((prev) => {
+                  const next = new Set(prev);
+                  next.add(userId);
+                  return Array.from(next);
+                });
                 setWaitingMessage(null);
               },
             );
@@ -1555,6 +1573,20 @@ export function useMeetSocket({
               }) => {
                 if (!isRoomEvent(eventRoomId)) return;
                 setHostUserId(hostUserId ?? null);
+              },
+            );
+
+            socket.on(
+              "adminUsersChanged",
+              ({
+                roomId: eventRoomId,
+                hostUserIds,
+              }: {
+                roomId?: string;
+                hostUserIds?: string[];
+              }) => {
+                if (!isRoomEvent(eventRoomId)) return;
+                setHostUserIds(Array.isArray(hostUserIds) ? hostUserIds : []);
               },
             );
 
