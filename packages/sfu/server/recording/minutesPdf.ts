@@ -1,6 +1,19 @@
 import PDFDocument from "pdfkit";
 import type { TranscriptChunk } from "./roomTranscriber.js";
 
+const formatTimestamp = (ms: number): string =>
+  new Date(ms).toLocaleString("en-US", {
+    dateStyle: "medium",
+    timeStyle: "medium",
+  });
+
+const ensurePageSpace = (doc: PDFKit.PDFDocument, estimatedLineCount = 2): void => {
+  const minimumY = doc.page.height - doc.page.margins.bottom - estimatedLineCount * 14;
+  if (doc.y > minimumY) {
+    doc.addPage();
+  }
+};
+
 export function buildMinutesPdf(options: {
   roomId: string;
   summary: string;
@@ -17,7 +30,7 @@ export function buildMinutesPdf(options: {
     doc.fontSize(16).text(`Meeting Minutes`, { align: "center" });
     doc.moveDown(0.5);
     doc.fontSize(12).text(`Room: ${options.roomId}`);
-    doc.text(`Generated: ${new Date().toISOString()}`);
+    doc.text(`Generated: ${formatTimestamp(Date.now())}`);
     doc.moveDown();
 
     doc.fontSize(14).text(`Summary`, { underline: true });
@@ -29,7 +42,8 @@ export function buildMinutesPdf(options: {
     doc.moveDown(0.3);
     doc.fontSize(11);
     for (const entry of options.transcript) {
-      const start = new Date(entry.startMs).toISOString();
+      ensurePageSpace(doc);
+      const start = formatTimestamp(entry.startMs);
       const speaker = entry.speaker || "unknown";
       doc.text(`[${start}] ${speaker}: ${entry.text}`);
     }
