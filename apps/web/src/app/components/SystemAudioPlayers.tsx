@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { Participant } from "../lib/types";
 import { isSystemUserId } from "../lib/utils";
 
@@ -50,7 +50,7 @@ function SystemAudioPlayer({
   onAutoplayBlocked,
 }: SystemAudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
-  const blockedRef = useRef(false);
+  const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -58,7 +58,7 @@ function SystemAudioPlayer({
     audio.srcObject = stream;
     audio.play().catch((err) => {
       if (err.name === "NotAllowedError") {
-        blockedRef.current = true;
+        setBlocked(true);
         onAutoplayBlocked?.();
         return;
       }
@@ -76,7 +76,7 @@ function SystemAudioPlayer({
       const attemptPlay = () => {
         audio.play().catch((err) => {
           if (err.name === "NotAllowedError") {
-            blockedRef.current = true;
+            setBlocked(true);
             onAutoplayBlocked?.();
             return;
           }
@@ -85,8 +85,8 @@ function SystemAudioPlayer({
           }
         });
       };
-      if (blockedRef.current) {
-        blockedRef.current = false;
+      if (blocked) {
+        setBlocked(false);
       }
       attemptPlay();
     }

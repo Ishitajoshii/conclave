@@ -169,12 +169,11 @@ export default function VideoSettings({
     }
   }, []);
 
-  const handleToggleOpen = useCallback(() => {
-    if (!isOpen) {
-      void fetchDevices();
+  useEffect(() => {
+    if (isOpen) {
+      fetchDevices();
     }
-    onToggleOpen();
-  }, [fetchDevices, isOpen, onToggleOpen]);
+  }, [isOpen, fetchDevices]);
 
   useEffect(() => {
     navigator.mediaDevices.addEventListener("devicechange", fetchDevices);
@@ -203,7 +202,7 @@ export default function VideoSettings({
   return (
     <div ref={containerRef} className="relative" style={{ fontFamily: "'PolySans Trial', sans-serif" }}>
       <button
-        onClick={handleToggleOpen}
+        onClick={onToggleOpen}
         className="w-8 h-8 rounded-full flex items-center justify-center text-[#FEFCD9]/70 hover:text-[#FEFCD9] hover:bg-[#FEFCD9]/10 transition-all"
         title="Settings"
       >

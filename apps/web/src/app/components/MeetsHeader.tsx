@@ -2,7 +2,7 @@
 
 import { Copy } from "lucide-react";
 import Image from "next/image";
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import VideoSettings from "./video-settings";
 
 interface MeetsHeaderProps {
@@ -54,15 +54,19 @@ function MeetsHeader({
   isSigningOut,
   onSignOut,
 }: MeetsHeaderProps) {
+  const [shareUrl, setShareUrl] = useState("");
   const [isCopied, setIsCopied] = useState(false);
-  const [hiddenShareRoomId, setHiddenShareRoomId] = useState<string | null>(
-    null
-  );
-  const shareUrl =
-    roomId && typeof window !== "undefined"
-      ? `${window.location.origin}/${roomId}`
-      : "";
-  const isShareVisible = hiddenShareRoomId !== roomId;
+  const [isShareVisible, setIsShareVisible] = useState(true);
+
+  useEffect(() => {
+    if (!roomId || typeof window === "undefined") {
+      setShareUrl("");
+      setIsShareVisible(true);
+      return;
+    }
+    setShareUrl(`${window.location.origin}/${roomId}`);
+    setIsShareVisible(true);
+  }, [roomId]);
 
   const handleCopyLink = async () => {
     const target = shareUrl || `/${roomId}`;
@@ -70,7 +74,7 @@ function MeetsHeader({
       await navigator.clipboard.writeText(target);
       setIsCopied(true);
       window.setTimeout(() => setIsCopied(false), 2000);
-      setHiddenShareRoomId(roomId);
+      setIsShareVisible(false);
     } catch (_error) {
       setIsCopied(false);
     }
@@ -80,7 +84,7 @@ function MeetsHeader({
     const displayShareUrl = shareUrl || `/${roomId}`;
     return (
       <header className="fixed top-0 left-0 right-0 z-[100] pointer-events-none">
-        <div className="flex items-center justify-center px-4 pt-1 pb-0 pointer-events-auto">
+        <div className="flex items-center justify-center px-4 pt-0 pointer-events-auto">
           <div className="flex items-center gap-3">
             {roomId.trim() && (
               <span
@@ -109,26 +113,24 @@ function MeetsHeader({
               onAudioInputDeviceChange={onAudioInputDeviceChange}
               onAudioOutputDeviceChange={onAudioOutputDeviceChange}
             />
+            {showShareLink && isAdmin && roomId.trim() && isShareVisible && (
+              <div
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-sm border border-[#FEFCD9]/10 text-[11px] text-[#FEFCD9]/70"
+                style={{ fontFamily: "'PolySans Mono', monospace" }}
+              >
+                <span className="text-[#FEFCD9]/50">Share link</span>
+                <button
+                  onClick={handleCopyLink}
+                  className="flex items-center gap-1 text-[#F95F4A] hover:text-[#ff7a66] transition-colors"
+                  title={displayShareUrl}
+                >
+                  <Copy className="w-3 h-3" />
+                  <span>{isCopied ? "Copied" : "Copy"}</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
-        {showShareLink && isAdmin && roomId.trim() && isShareVisible && (
-          <div className="flex justify-center pointer-events-auto">
-            <div
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-sm border border-[#FEFCD9]/10 text-[11px] text-[#FEFCD9]/70"
-              style={{ fontFamily: "'PolySans Mono', monospace" }}
-            >
-              <span className="text-[#FEFCD9]/50">Share link</span>
-              <button
-                onClick={handleCopyLink}
-                className="flex items-center gap-1 text-[#F95F4A] hover:text-[#ff7a66] transition-colors"
-                title={displayShareUrl}
-              >
-                <Copy className="w-3 h-3" />
-                <span>{isCopied ? "Copied" : "Copy"}</span>
-              </button>
-            </div>
-          </div>
-        )}
       </header>
     );
   }

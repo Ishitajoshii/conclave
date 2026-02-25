@@ -3,6 +3,7 @@
 import { Ghost, Hand } from "lucide-react";
 import { memo, useEffect, useRef } from "react";
 import { DevPlaygroundWebApp } from "@conclave/apps-sdk/dev-playground/web";
+import { useSmartParticipantOrder } from "../hooks/useSmartParticipantOrder";
 import type { Participant } from "../lib/types";
 import { getSpeakerHighlightClasses, isSystemUserId } from "../lib/utils";
 import ParticipantVideo from "./ParticipantVideo";
@@ -51,9 +52,13 @@ function DevPlaygroundLayout({
     }
   }, [localStream]);
 
-  const participantsList = Array.from(participants.values()).filter(
-    (participant) =>
-      !isSystemUserId(participant.userId) && participant.userId !== currentUserId
+  const participantsList = useSmartParticipantOrder(
+    Array.from(participants.values()).filter(
+      (participant) =>
+        !isSystemUserId(participant.userId) &&
+        participant.userId !== currentUserId
+    ),
+    activeSpeakerId
   );
 
   return (

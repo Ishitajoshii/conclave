@@ -11,6 +11,7 @@ import { summarizeTranscript } from "./recording/summarizeTranscript.js";
 import { buildMinutesPdf } from "./recording/minutesPdf.js";
 import { cleanupRoomBrowser } from "./socket/handlers/sharedBrowserHandlers.js";
 import type { SfuState } from "./state.js";
+import { clearWebinarLinkSlug } from "./webinar.js";
 
 export const getRoomChannelId = (clientId: string, roomId: string): string =>
   `${clientId}:${roomId}`;
@@ -67,6 +68,15 @@ export const cleanupRoom = (state: SfuState, channelId: string): boolean => {
         .catch((err) => {
           Logger.warn("Failed to summarize transcript", err);
         });
+    }
+    const webinarConfig = state.webinarConfigs.get(channelId);
+    if (webinarConfig) {
+      clearWebinarLinkSlug({
+        webinarConfig,
+        webinarLinks: state.webinarLinks,
+        roomChannelId: channelId,
+      });
+      state.webinarConfigs.delete(channelId);
     }
     room.close();
     state.rooms.delete(channelId);

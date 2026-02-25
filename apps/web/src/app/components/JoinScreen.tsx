@@ -14,7 +14,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { signIn, useSession } from "@/lib/auth-client";
+import { signIn, signOut, useSession } from "@/lib/auth-client";
 import type { RoomInfo } from "@/lib/sfu-types";
 import type { ConnectionState, MeetError } from "../lib/types";
 import {
@@ -26,10 +26,41 @@ import {
   ROOM_CODE_MAX_LENGTH,
   extractRoomCode,
   getRoomWordSuggestions,
+  sanitizeInstitutionDisplayName,
   sanitizeRoomCodeInput,
   sanitizeRoomCode,
 } from "../lib/utils";
 import MeetsErrorBanner from "./MeetsErrorBanner";
+
+const normalizeGuestName = (value: string): string =>
+  value.trim().replace(/\s+/g, " ");
+const GUEST_USER_STORAGE_KEY = "conclave:guest-user";
+
+const createGuestId = (): string => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `guest-${crypto.randomUUID()}`;
+  }
+  return `guest-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
+const buildGuestUser = (
+  name: string,
+  existingUser?: { id?: string; email?: string | null }
+) => {
+  const existingGuestId =
+    typeof existingUser?.id === "string" && existingUser.id.startsWith("guest-")
+      ? existingUser.id
+      : undefined;
+  const existingEmail =
+    typeof existingUser?.email === "string" ? existingUser.email.trim() : "";
+  const id = existingGuestId || createGuestId();
+  const email = existingEmail || `${id}@guest.conclave`;
+  return {
+    id,
+    email,
+    name,
+  };
+};
 
 interface JoinScreenProps {
   roomId: string;
@@ -99,16 +130,16 @@ function JoinScreen({
   const [isMicOn, setIsMicOn] = useState(false); // Start with mic off
   const isRoutedRoom = forceJoinOnly;
   const enforceShortCode = enableRoomRouting || forceJoinOnly;
+  const hasUserIdentity = Boolean(user?.id || user?.email);
   const [activeTab, setActiveTab] = useState<"new" | "join">(() =>
     isRoutedRoom ? "join" : "new"
   );
-  const [manualPhase, setManualPhase] = useState<"welcome" | "auth" | "join" | null>(
-    null
-  );
-  const phase =
-    user && user.id && !user.id.startsWith("guest-")
-      ? "join"
-      : (manualPhase ?? "welcome");
+  const [phase, setPhase] = useState<"welcome" | "auth" | "join">(() => {
+    if (hasUserIdentity) {
+      return "join";
+    }
+    return "welcome";
+  });
   const [guestName, setGuestName] = useState("");
   const [signInProvider, setSignInProvider] = useState<
     "google" | "apple" | "roblox" | "vercel" | null
@@ -116,6 +147,7 @@ function JoinScreen({
     null
   );
   const isSigningIn = signInProvider !== null;
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const normalizedSegments = useMemo(
     () => normalizedRoomId.split("-"),
     [normalizedRoomId]
@@ -136,6 +168,7 @@ function JoinScreen({
       : "";
 
   const { data: session } = useSession();
+  const canSignOut = Boolean(session?.user || user?.id || user?.email);
   const lastAppliedSessionUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -144,34 +177,69 @@ function JoinScreen({
       return;
     }
 
-    if (user && !lastAppliedSessionUserIdRef.current) {
+    const isGuestIdentity = Boolean(user?.id?.startsWith("guest-"));
+    if (
+      (!user || isGuestIdentity) &&
+      lastAppliedSessionUserIdRef.current !== session.user.id
+    ) {
+      const sessionUser = {
+        id: session.user.id,
+        email: session.user.email || "",
+        name: sanitizeInstitutionDisplayName(
+          session.user.name || session.user.email || "User",
+          session.user.email || ""
+        ),
+      };
+      onUserChange(sessionUser);
+      setPhase("join");
       lastAppliedSessionUserIdRef.current = session.user.id;
       return;
     }
 
-    if (!user && lastAppliedSessionUserIdRef.current !== session.user.id) {
-      const sessionUser = {
-        id: session.user.id,
-        email: session.user.email || "",
-        name: session.user.name || session.user.email || "User",
-      };
-      onUserChange(sessionUser);
+    if (user && !isGuestIdentity && !lastAppliedSessionUserIdRef.current) {
       lastAppliedSessionUserIdRef.current = session.user.id;
     }
   }, [session, user, onUserChange]);
 
+  const prevUserRef = useRef(user);
   useEffect(() => {
-    if (phase !== "join" && localStream) {
-      localStream.getTracks().forEach((t) => t.stop());
-      setLocalStream(null);
+    const prevUser = prevUserRef.current;
+    prevUserRef.current = user;
+
+    if (!prevUser && user) {
+      setPhase("join");
+    }
+    if (prevUser && !user) {
+      setPhase("welcome");
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!user?.id?.startsWith("guest-")) return;
+    if (guestName.trim().length > 0) return;
+    const nextName = normalizeGuestName(user.name || "");
+    if (!nextName) return;
+    setGuestName(nextName);
+  }, [guestName, user]);
+
+  useEffect(() => {
+    // Only capture media when in join phase
+    if (phase !== "join") {
+      // Stop any existing stream when leaving join phase
+      if (localStream) {
+        localStream.getTracks().forEach((t) => t.stop());
+        setLocalStream(null);
+      }
+      return;
     }
 
+    // Don't auto-capture - let user explicitly turn on camera/mic
     return () => {
       if (localStream) {
         localStream.getTracks().forEach((t) => t.stop());
       }
     };
-  }, [localStream, phase]);
+  }, [phase]);
 
   useEffect(() => {
     if (videoRef.current && localStream) videoRef.current.srcObject = localStream;
@@ -188,13 +256,13 @@ function JoinScreen({
       }
       setIsCameraOn(false);
     } else {
-      await navigator.mediaDevices
-        .getUserMedia({
+      // Turn on camera - acquire new video track
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
           video: STANDARD_QUALITY_CONSTRAINTS,
-        })
-        .then((stream) => {
-          const videoTrack = stream.getVideoTracks()[0];
-          if (!videoTrack) return;
+        });
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack) {
           if ("contentHint" in videoTrack) {
             videoTrack.contentHint = "motion";
           }
@@ -207,10 +275,10 @@ function JoinScreen({
             videoRef.current.srcObject = localStream || stream;
           }
           setIsCameraOn(true);
-        })
-        .catch(() => {
-          console.log("[JoinScreen] Camera access denied");
-        });
+        }
+      } catch (err) {
+        console.log("[JoinScreen] Camera access denied");
+      }
     }
   };
 
@@ -224,23 +292,23 @@ function JoinScreen({
       }
       setIsMicOn(false);
     } else {
-      await navigator.mediaDevices
-        .getUserMedia({
+      // Turn on mic - acquire new audio track
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
           audio: DEFAULT_AUDIO_CONSTRAINTS,
-        })
-        .then((stream) => {
-          const audioTrack = stream.getAudioTracks()[0];
-          if (!audioTrack) return;
+        });
+        const audioTrack = stream.getAudioTracks()[0];
+        if (audioTrack) {
           if (localStream) {
             localStream.addTrack(audioTrack);
           } else {
             setLocalStream(stream);
           }
           setIsMicOn(true);
-        })
-        .catch(() => {
-          console.log("[JoinScreen] Microphone access denied");
-        });
+        }
+      } catch (err) {
+        console.log("[JoinScreen] Microphone access denied");
+      }
     }
   };
 
@@ -258,26 +326,56 @@ function JoinScreen({
     provider: "google" | "apple" | "roblox" | "vercel"
   ) => {
     setSignInProvider(provider);
-    await signIn
-      .social({
+    try {
+      await signIn.social({
         provider,
         callbackURL: window.location.href,
+      });
+    } catch (error) {
+      console.error("Sign in error:", error);
+    } finally {
+      setSignInProvider(null);
+    }
+  };
+
+  const handleSignOut = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    const clearGuestStorage = () => {
+      if (typeof window === "undefined") return;
+      window.localStorage.removeItem(GUEST_USER_STORAGE_KEY);
+    };
+
+    if (!session?.user) {
+      clearGuestStorage();
+      onUserChange(null);
+      onIsAdminChange(false);
+      setPhase("welcome");
+      setIsSigningOut(false);
+      return;
+    }
+
+    await signOut()
+      .then(() => {
+        clearGuestStorage();
+        onUserChange(null);
+        onIsAdminChange(false);
+        setPhase("welcome");
       })
       .catch((error) => {
-        console.error("Sign in error:", error);
+        console.error("Sign out error:", error);
       });
-    setSignInProvider(null);
+    setIsSigningOut(false);
   };
 
   const handleGuest = () => {
-    const guestUser = {
-      id: `guest-${Date.now()}`,
-      email: `guest-${guestName}@guest.com`,
-      name: guestName,
-    };
+    const normalizedGuestName = normalizeGuestName(guestName);
+    if (!normalizedGuestName) return;
+    const guestUser = buildGuestUser(normalizedGuestName, user);
     onUserChange(guestUser);
     onIsAdminChange(false);
-    setManualPhase("join");
+    setGuestName(normalizedGuestName);
+    setPhase("join");
   };
 
   const handleJoin = () => {
@@ -304,8 +402,11 @@ function JoinScreen({
 
   useEffect(() => {
     if (!isRoutedRoom) return;
+    if (activeTab !== "join") {
+      setActiveTab("join");
+    }
     onIsAdminChange(false);
-  }, [isRoutedRoom, onIsAdminChange]);
+  }, [activeTab, isRoutedRoom, onIsAdminChange]);
 
   useEffect(() => {
     if (normalizedRoomId === roomId) return;
@@ -358,7 +459,7 @@ function JoinScreen({
             </p>
 
             <button
-              onClick={() => setManualPhase("auth")}
+              onClick={() => setPhase("auth")}
                 className="group flex items-center gap-3 px-8 py-3 bg-[#F95F4A] text-white text-xs uppercase tracking-widest rounded-lg hover:bg-[#e8553f] transition-all hover:gap-4"
                 style={{ fontFamily: "'PolySans Mono', monospace" }}
               >
@@ -506,7 +607,7 @@ function JoinScreen({
               </div>
 
               <button
-                onClick={() => setManualPhase("welcome")}
+                onClick={() => setPhase("welcome")}
                 className="w-full mt-6 text-[11px] text-[#FEFCD9]/30 hover:text-[#FEFCD9]/50 transition-colors uppercase tracking-widest"
                 style={{ fontFamily: "'PolySans Mono', monospace" }}
               >
@@ -538,11 +639,23 @@ function JoinScreen({
                     </button>
                   </div>
 
-                  <div
-                    className="absolute top-3 left-3 px-2.5 py-1 bg-black/50 backdrop-blur-sm rounded-full text-[11px] text-[#FEFCD9]/70"
-                    style={{ fontFamily: "'PolySans Mono', monospace" }}
-                  >
-                    {userEmail}
+                  <div className="absolute top-3 left-3 flex items-center gap-2 max-w-[80%]">
+                    <div
+                      className="min-w-0 px-2.5 py-1 bg-black/50 backdrop-blur-sm rounded-full text-[11px] text-[#FEFCD9]/70 truncate"
+                      style={{ fontFamily: "'PolySans Mono', monospace" }}
+                    >
+                      {userEmail}
+                    </div>
+                    {canSignOut && (
+                      <button
+                        onClick={handleSignOut}
+                        disabled={isSigningOut}
+                        className="shrink-0 px-2.5 py-1 bg-black/50 backdrop-blur-sm rounded-full text-[9px] uppercase tracking-widest text-[#FEFCD9]/70 hover:bg-black/70 disabled:opacity-50"
+                        style={{ fontFamily: "'PolySans Mono', monospace" }}
+                      >
+                        {isSigningOut ? "Signing out..." : "Sign out"}
+                      </button>
+                    )}
                   </div>
                 </div>
 
