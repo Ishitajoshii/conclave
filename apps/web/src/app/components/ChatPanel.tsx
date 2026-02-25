@@ -46,10 +46,12 @@ function ChatPanel({
   const shouldAutoScrollRef = useRef(true);
   const sendAnimationTimeoutRef = useRef<number | null>(null);
   const prevMessageIdsRef = useRef<Set<string>>(new Set());
+  const previousMessageCountRef = useRef(messages.length);
   const hasInitializedRef = useRef(false);
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const [isSendAnimating, setIsSendAnimating] = useState(false);
+  const [unseenCount, setUnseenCount] = useState(0);
   const isChatDisabled = isGhostMode || (isChatLocked && !isAdmin);
 
   const commandSuggestions = getCommandSuggestions(chatInput);
@@ -118,9 +120,19 @@ function ChatPanel({
   }, [chatInput]);
 
   useEffect(() => {
-    if (shouldAutoScrollRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const previousCount = previousMessageCountRef.current;
+    const addedMessages = messages.length - previousCount;
+    if (addedMessages > 0) {
+      if (shouldAutoScrollRef.current) {
+        requestAnimationFrame(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        });
+        setUnseenCount(0);
+      } else {
+        setUnseenCount((prev) => prev + addedMessages);
+      }
     }
+    previousMessageCountRef.current = messages.length;
   }, [messages]);
 
   useEffect(
@@ -142,7 +154,17 @@ function ChatPanel({
     const threshold = 64;
     const distanceFromBottom =
       container.scrollHeight - container.scrollTop - container.clientHeight;
-    shouldAutoScrollRef.current = distanceFromBottom <= threshold;
+    const isNearBottom = distanceFromBottom <= threshold;
+    shouldAutoScrollRef.current = isNearBottom;
+    if (isNearBottom && unseenCount > 0) {
+      setUnseenCount(0);
+    }
+  };
+
+  const scrollToLatest = () => {
+    shouldAutoScrollRef.current = true;
+    setUnseenCount(0);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -172,6 +194,11 @@ function ChatPanel({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      onClose();
+      return;
+    }
+
     if (showMentionSuggestions) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -237,7 +264,7 @@ function ChatPanel({
           href={segment.href}
           target="_blank"
           rel="noopener noreferrer"
-          className="underline decoration-[#FEFCD9]/50 underline-offset-2 hover:decoration-[#FEFCD9]"
+          className="break-all underline decoration-[#FEFCD9]/50 underline-offset-2 hover:decoration-[#FEFCD9]"
         >
           {segment.text}
         </a>
@@ -267,15 +294,18 @@ function ChatPanel({
       className="fixed right-4 top-16 bottom-20 w-72 bg-[#0d0e0d]/95 backdrop-blur-md border border-[#FEFCD9]/10 rounded-xl flex flex-col z-40 shadow-2xl"
       style={{ fontFamily: "'PolySans Trial', sans-serif" }}
     >
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-[#FEFCD9]/10">
-        <span
-          className="text-[10px] uppercase tracking-[0.12em] text-[#FEFCD9]/60"
-          style={{ fontFamily: "'PolySans Mono', monospace" }}
-        >
-          Chat
-        </span>
+      <div className="shrink-0 flex items-center justify-between px-3 py-2.5 border-b border-[#FEFCD9]/10">
+        <div className="flex items-center gap-2">
+          <span
+            className="text-[10px] uppercase tracking-[0.12em] text-[#FEFCD9]/60"
+            style={{ fontFamily: "'PolySans Mono', monospace" }}
+          >
+            Chat
+          </span>
+        </div>
         <button
           onClick={onClose}
+          title="Close chat (Esc)"
           className="w-6 h-6 rounded flex items-center justify-center text-[#FEFCD9]/50 hover:text-[#FEFCD9] hover:bg-[#FEFCD9]/10 transition-all"
         >
           <X className="w-3.5 h-3.5" />
@@ -283,98 +313,143 @@ function ChatPanel({
       </div>
 
       {/* Messages */}
-      <div
-        ref={scrollContainerRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-3 py-2 space-y-2"
-      >
-        {messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-[#FEFCD9]/30 text-xs">
-            No messages yet
-          </div>
-        ) : (
-          messages.map((msg) => {
-            const isOwn = msg.userId === currentUserId;
-            const isNew =
-              hasInitializedRef.current && newMessageIds.has(msg.id);
-            const displayName = formatDisplayName(msg.displayName || msg.userId);
-            const actionText = getActionText(msg.content);
-            const directMessageLabel = msg.isDirect
-              ? isOwn
-                ? `Private to ${formatDisplayName(
-                    msg.dmTargetDisplayName || msg.dmTargetUserId || "user"
-                  )}`
-                : "Private message"
-              : null;
-            if (actionText) {
+      <div className="relative flex-1 min-h-0">
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="web-chat-scroll h-full min-h-0 overflow-y-auto overflow-x-hidden px-3 py-2 space-y-1.5"
+        >
+          {messages.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-[#FEFCD9]/30 text-xs">
+              No messages yet
+            </div>
+          ) : (
+            messages.map((msg, index) => {
+              const isOwn = msg.userId === currentUserId;
+              const isNew =
+                hasInitializedRef.current && newMessageIds.has(msg.id);
+              const displayName = formatDisplayName(msg.displayName || msg.userId);
+              const actionText = getActionText(msg.content);
+              const previousMessage = index > 0 ? messages[index - 1] : null;
+              const nextMessage =
+                index < messages.length - 1 ? messages[index + 1] : null;
+              const previousActionText = previousMessage
+                ? getActionText(previousMessage.content)
+                : null;
+              const nextActionText = nextMessage
+                ? getActionText(nextMessage.content)
+                : null;
+              const groupedWithPrevious = Boolean(
+                previousMessage &&
+                  !previousActionText &&
+                  previousMessage.userId === msg.userId &&
+                  previousMessage.isDirect === msg.isDirect &&
+                  Math.abs(msg.timestamp - previousMessage.timestamp) < 120000
+              );
+              const groupedWithNext = Boolean(
+                nextMessage &&
+                  !nextActionText &&
+                  nextMessage.userId === msg.userId &&
+                  nextMessage.isDirect === msg.isDirect &&
+                  Math.abs(nextMessage.timestamp - msg.timestamp) < 120000
+              );
+              const directMessageLabel = msg.isDirect
+                ? isOwn
+                  ? `Private to ${formatDisplayName(
+                      msg.dmTargetDisplayName || msg.dmTargetUserId || "user"
+                    )}`
+                  : "Private message"
+                : null;
+              if (actionText) {
+                return (
+                  <div
+                    key={msg.id}
+                    className={`${isNew ? "web-chat-action-new" : ""} text-[11px] text-[#FEFCD9]/70 italic px-1 py-0.5`}
+                  >
+                    {directMessageLabel ? (
+                      <p className="mb-0.5 text-[9px] not-italic uppercase tracking-[0.14em] text-amber-300/80">
+                        {directMessageLabel}
+                      </p>
+                    ) : null}
+                    <span className="text-[#F95F4A]/80">
+                      {isOwn ? "You" : displayName}
+                    </span>{" "}
+                    {actionText}
+                  </div>
+                );
+              }
               return (
                 <div
                   key={msg.id}
-                  className={`${isNew ? "web-chat-action-new" : ""} text-[11px] text-[#FEFCD9]/70 italic px-1`}
+                  className={`flex flex-col ${
+                    isOwn ? "items-end" : "items-start"
+                  } ${
+                    isNew
+                      ? isOwn
+                        ? "web-chat-message-new-self"
+                        : "web-chat-message-new-peer"
+                      : ""
+                  }`}
                 >
-                  {directMessageLabel ? (
-                    <p className="mb-0.5 text-[9px] not-italic uppercase tracking-[0.14em] text-amber-300/80">
-                      {directMessageLabel}
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-2.5 py-1.5 ${
+                      isOwn
+                        ? "bg-[#F95F4A] text-white selection:bg-white/90 selection:text-[#0d0e0d]"
+                        : "bg-[#1a1a1a] text-[#FEFCD9]/90 selection:bg-[#F95F4A]/40 selection:text-white"
+                    } ${
+                      isOwn
+                        ? groupedWithPrevious
+                          ? "rounded-tr-md"
+                          : ""
+                        : groupedWithPrevious
+                          ? "rounded-tl-md"
+                          : ""
+                    } ${msg.isDirect ? "ring-1 ring-amber-300/30" : ""}`}
+                  >
+                    {!isOwn && !groupedWithPrevious && (
+                      <p className="text-[9px] text-[#F95F4A]/80 mb-0.5">{displayName}</p>
+                    )}
+                    {directMessageLabel ? (
+                      <p className="mb-0.5 text-[9px] uppercase tracking-[0.14em] text-amber-300/80">
+                        {directMessageLabel}
+                      </p>
+                    ) : null}
+                    <p className="text-xs break-words leading-relaxed">
+                      {renderMessageContent(msg.content)}
                     </p>
-                  ) : null}
-                  <span className="text-[#F95F4A]/80">
-                    {isOwn ? "You" : displayName}
-                  </span>{" "}
-                  {actionText}
+                  </div>
+                  {!groupedWithNext && (
+                    <span
+                      className={`${isNew ? "web-chat-meta-new" : ""} text-[9px] text-[#FEFCD9]/20 mt-0.5 tabular-nums`}
+                    >
+                      {new Date(msg.timestamp).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  )}
                 </div>
               );
-            }
-            return (
-              <div
-                key={msg.id}
-                className={`flex flex-col ${
-                  isOwn ? "items-end" : "items-start"
-                } ${
-                  isNew
-                    ? isOwn
-                      ? "web-chat-message-new-self"
-                      : "web-chat-message-new-peer"
-                    : ""
-                }`}
-              >
-                <div
-                  className={`max-w-[85%] rounded-lg px-2.5 py-1.5 ${
-                    isOwn
-                      ? "bg-[#F95F4A] text-white selection:bg-white/90 selection:text-[#0d0e0d]"
-                      : "bg-[#1a1a1a] text-[#FEFCD9]/90 selection:bg-[#F95F4A]/40 selection:text-white"
-                  } ${msg.isDirect ? "ring-1 ring-amber-300/30" : ""}`}
-                >
-                  {!isOwn && (
-                    <p className="text-[9px] text-[#F95F4A]/80 mb-0.5">{displayName}</p>
-                  )}
-                  {directMessageLabel ? (
-                    <p className="mb-0.5 text-[9px] uppercase tracking-[0.14em] text-amber-300/80">
-                      {directMessageLabel}
-                    </p>
-                  ) : null}
-                  <p className="text-xs break-words leading-relaxed">
-                    {renderMessageContent(msg.content)}
-                  </p>
-                </div>
-                <span
-                  className={`${isNew ? "web-chat-meta-new" : ""} text-[9px] text-[#FEFCD9]/20 mt-0.5 tabular-nums`}
-                >
-                  {new Date(msg.timestamp).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-              </div>
-            );
-          })
+            })
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+        {unseenCount > 0 && (
+          <button
+            type="button"
+            onClick={scrollToLatest}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-[#FEFCD9]/20 bg-[#0d0e0d]/95 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-[#FEFCD9]/80 backdrop-blur-md shadow-lg hover:bg-[#151615] transition-colors"
+            style={{ fontFamily: "'PolySans Mono', monospace" }}
+          >
+            {unseenCount} new {unseenCount === 1 ? "message" : "messages"}
+          </button>
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Input */}
       <form
         onSubmit={handleSubmit}
-        className="p-2 border-t border-[#FEFCD9]/5"
+        className="shrink-0 p-2 border-t border-[#FEFCD9]/5"
       >
         <div className="relative">
           {showMentionSuggestions && (

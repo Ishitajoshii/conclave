@@ -773,7 +773,7 @@ select:focus {
 @keyframes web-chat-pop-peer {
   from {
     opacity: 0;
-    transform: translate3d(-8px, 6px, 0) scale(0.985);
+    transform: translate3d(-4px, 4px, 0) scale(0.99);
   }
 
   to {
@@ -785,7 +785,7 @@ select:focus {
 @keyframes web-chat-pop-self {
   from {
     opacity: 0;
-    transform: translate3d(8px, 6px, 0) scale(0.985);
+    transform: translate3d(4px, 4px, 0) scale(0.99);
   }
 
   to {
@@ -852,6 +852,24 @@ select:focus {
 
 .web-chat-send-active {
   animation: web-chat-send-tap 0.18s ease-out both;
+}
+
+.web-chat-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(254, 252, 217, 0.18) transparent;
+}
+
+.web-chat-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.web-chat-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(254, 252, 217, 0.2);
+}
+
+.web-chat-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {
