@@ -114,6 +114,7 @@ export const createSfuApp = ({
     // Try cached minutes first
     const cached = popCachedMinutes(channelId);
     if (cached) {
+      Logger.info(`Minutes cache hit for channel=${channelId}`);
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",
@@ -123,13 +124,20 @@ export const createSfuApp = ({
     }
 
     let transcript = stopRoomTranscriber(channelId);
+    Logger.info(
+      `Minutes request: channel=${channelId} transcriptAfterStop=${transcript.length}`,
+    );
     if (!transcript.length) {
       transcript = popCachedTranscript(channelId);
+      Logger.info(
+        `Minutes request: channel=${channelId} transcriptAfterCache=${transcript.length}`,
+      );
     }
 
     if (!transcript.length) {
       const summary =
         "No transcript available. Speech-to-text was not configured or no audio was captured.";
+      Logger.warn(`Minutes request has empty transcript for channel=${channelId}`);
       try {
         const pdf = await buildMinutesPdf({ roomId, summary, transcript: [] });
         res.setHeader("Content-Type", "application/pdf");
@@ -149,6 +157,9 @@ export const createSfuApp = ({
     try {
       const summary = await summarizeTranscript(transcript);
       const pdf = await buildMinutesPdf({ roomId, summary, transcript });
+      Logger.info(
+        `Minutes generated for channel=${channelId} transcriptChunks=${transcript.length}`,
+      );
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",

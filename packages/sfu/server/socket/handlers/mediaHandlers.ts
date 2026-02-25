@@ -63,6 +63,9 @@ export const registerMediaHandlers = (context: ConnectionContext): void => {
             (process.env.NODE_ENV === "production"
               ? ""
               : DEFAULT_LOCAL_VOSK_WS_URL);
+          Logger.info(
+            `Starting room transcriber for channel=${channelId} producer=${producer.id} stt=${sttUrl || "unset"}`,
+          );
           void transcriber.start(producer, {
             sttUrl,
             sttHeaders: process.env.STT_API_KEY

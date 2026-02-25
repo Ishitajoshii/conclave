@@ -1,3 +1,4 @@
+import dgram from "dgram";
 import { spawn } from "child_process";
 import WebSocket from "ws";
 import type {
@@ -27,11 +28,88 @@ type VoskMessage = {
   alternatives?: Array<{ text?: string }>;
 };
 
+type RtpCodecLike = {
+  payloadType: number;
+  mimeType: string;
+  clockRate: number;
+  channels?: number;
+  parameters?: Record<string, unknown>;
+};
+
 export type TranscriptChunk = {
   startMs: number;
   endMs: number;
   text: string;
   speaker?: string;
+};
+
+const allocateUdpPort = (): Promise<number> =>
+  new Promise((resolve, reject) => {
+    const socket = dgram.createSocket("udp4");
+    socket.once("error", (err) => {
+      try {
+        socket.close();
+      } catch {}
+      reject(err);
+    });
+    socket.bind(0, "127.0.0.1", () => {
+      const addr = socket.address();
+      if (typeof addr === "string") {
+        try {
+          socket.close();
+        } catch {}
+        reject(new Error("Failed to allocate UDP port"));
+        return;
+      }
+      const port = addr.port;
+      try {
+        socket.close();
+      } catch (err) {
+        reject(err);
+        return;
+      }
+      resolve(port);
+    });
+  });
+
+const encodeFmtp = (parameters?: Record<string, unknown>): string => {
+  if (!parameters) return "";
+  const entries = Object.entries(parameters).filter(
+    ([, value]) => value !== undefined && value !== null,
+  );
+  return entries
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(";");
+};
+
+const buildConsumerSdp = (rtpPort: number, consumer: Consumer): string => {
+  const codec = (consumer.rtpParameters.codecs?.[0] || null) as
+    | RtpCodecLike
+    | null;
+  if (!codec) {
+    throw new Error("No RTP codec found for room transcriber consumer");
+  }
+  const codecName = codec.mimeType.split("/")[1] || "opus";
+  const channels = codec.channels && codec.channels > 1 ? `/${codec.channels}` : "";
+  const fmtp = encodeFmtp(codec.parameters);
+  const lines = [
+    "v=0",
+    "o=- 0 0 IN IP4 127.0.0.1",
+    "s=ConclaveRoomAudio",
+    "c=IN IP4 127.0.0.1",
+    "t=0 0",
+    `m=audio ${rtpPort} RTP/AVP ${codec.payloadType}`,
+    "a=rtcp-mux",
+    `a=rtpmap:${codec.payloadType} ${codecName}/${codec.clockRate}${channels}`,
+  ];
+  if (fmtp) {
+    lines.push(`a=fmtp:${codec.payloadType} ${fmtp}`);
+  }
+  for (const ext of consumer.rtpParameters.headerExtensions || []) {
+    lines.push(`a=extmap:${ext.id} ${ext.uri}`);
+  }
+  lines.push("a=recvonly");
+  return `${lines.join("\n")}\n`;
 };
 
 class RoomTranscriber {
@@ -47,10 +125,13 @@ class RoomTranscriber {
   private stopSubscriptions: Array<() => void> = [];
   private ffmpegForceKillTimer?: ReturnType<typeof setTimeout>;
   private stopped = true;
+  private forwardedAudioBytes = 0;
+  private sttMessageCount = 0;
 
   private ffmpegOnError?: (err: Error) => void;
   private ffmpegOnExit?: (code: number | null, signal: NodeJS.Signals | null) => void;
   private ffmpegStdoutOnData?: (chunk: Buffer) => void;
+  private ffmpegStderrOnData?: (chunk: Buffer) => void;
   private sttOnOpen?: () => void;
   private sttOnError?: (err: Error) => void;
   private sttOnMessage?: (data: WebSocket.RawData) => void;
@@ -75,6 +156,8 @@ class RoomTranscriber {
     this.stopped = false;
     this.producerId = producer.id;
     this.sessionStartedAtMs = Date.now();
+    this.forwardedAudioBytes = 0;
+    this.sttMessageCount = 0;
 
     try {
       const transport = await this.router.createPlainTransport({
@@ -84,26 +167,30 @@ class RoomTranscriber {
       });
       this.transport = transport;
 
+      const rtpPort = await allocateUdpPort();
+      await transport.connect({ ip: "127.0.0.1", port: rtpPort });
+
       const consumer = await transport.consume({
         producerId: producer.id,
         rtpCapabilities: this.router.rtpCapabilities as RtpCapabilities,
-        paused: false,
+        paused: true,
       });
       this.consumer = consumer;
+
+      const sdp = buildConsumerSdp(rtpPort, consumer);
 
       this.ffmpeg = spawn(
         FFMPEG_BIN,
         [
-          "-nostdin",
           "-hide_banner",
           "-loglevel",
-          "error",
+          "warning",
           "-protocol_whitelist",
-          "file,udp,rtp",
+          "file,pipe,udp,rtp",
           "-f",
-          "rtp",
+          "sdp",
           "-i",
-          `rtp://127.0.0.1:${transport.tuple.localPort}`,
+          "pipe:0",
           "-ac",
           "1",
           "-ar",
@@ -112,7 +199,11 @@ class RoomTranscriber {
           "s16le",
           "pipe:1",
         ],
-        { stdio: ["ignore", "pipe", "inherit"] },
+        { stdio: ["pipe", "pipe", "pipe"] },
+      );
+
+      Logger.info(
+        `Transcriber starting: producer=${producer.id} stt=${opts.sttUrl} ffmpeg=${FFMPEG_BIN} rtpPort=${rtpPort}`,
       );
 
       this.ffmpegOnError = (err) => {
@@ -140,9 +231,23 @@ class RoomTranscriber {
       };
       this.ffmpeg.on("exit", this.ffmpegOnExit);
 
+      this.ffmpegStderrOnData = (chunk) => {
+        const line = chunk.toString("utf8").trim();
+        if (line) {
+          Logger.warn(`ffmpeg/stt stderr: ${line}`);
+        }
+      };
+      this.ffmpeg.stderr?.on("data", this.ffmpegStderrOnData);
+
+      if (this.ffmpeg.stdin?.writable) {
+        this.ffmpeg.stdin.write(sdp);
+        this.ffmpeg.stdin.end();
+      }
+
       this.sttSocket = new WebSocket(opts.sttUrl, { headers: opts.sttHeaders });
 
       this.sttOnOpen = () => {
+        Logger.info(`STT websocket open for producer=${producer.id}`);
         this.sttSocket?.send(
           JSON.stringify({ config: { sample_rate: DEFAULT_STT_SAMPLE_RATE } }),
         );
@@ -155,11 +260,16 @@ class RoomTranscriber {
       this.sttSocket.on("error", this.sttOnError);
 
       this.sttOnMessage = (data) => {
+        this.sttMessageCount += 1;
         this.handleSttMessage(this.toUtf8(data), producer.id);
       };
       this.sttSocket.on("message", this.sttOnMessage);
 
       this.ffmpegStdoutOnData = (chunk: Buffer) => {
+        this.forwardedAudioBytes += chunk.length;
+        if (this.forwardedAudioBytes === chunk.length) {
+          Logger.info(`Transcriber audio flow started for producer=${producer.id}`);
+        }
         if (this.sttSocket?.readyState === WebSocket.OPEN) {
           this.sttSocket.send(chunk);
         }
@@ -173,6 +283,8 @@ class RoomTranscriber {
       this.stopSubscriptions.push(() => consumer.off("producerclose", stop));
       this.stopSubscriptions.push(() => consumer.off("transportclose", stop));
       this.stopSubscriptions.push(() => transport.off("routerclose", stop));
+
+      await consumer.resume();
     } catch (err) {
       Logger.warn("Failed to start room transcriber", err);
       this.stop();
@@ -280,9 +392,7 @@ class RoomTranscriber {
       const unsubscribe = this.stopSubscriptions.pop();
       try {
         unsubscribe?.();
-      } catch {
-        // noop
-      }
+      } catch {}
     }
 
     if (this.ffmpeg && this.ffmpegOnError) {
@@ -293,6 +403,9 @@ class RoomTranscriber {
     }
     if (this.ffmpeg?.stdout && this.ffmpegStdoutOnData) {
       this.ffmpeg.stdout.off("data", this.ffmpegStdoutOnData);
+    }
+    if (this.ffmpeg?.stderr && this.ffmpegStderrOnData) {
+      this.ffmpeg.stderr.off("data", this.ffmpegStderrOnData);
     }
 
     if (this.sttSocket && this.sttOnOpen) {
@@ -308,6 +421,7 @@ class RoomTranscriber {
     this.ffmpegOnError = undefined;
     this.ffmpegOnExit = undefined;
     this.ffmpegStdoutOnData = undefined;
+    this.ffmpegStderrOnData = undefined;
     this.sttOnOpen = undefined;
     this.sttOnError = undefined;
     this.sttOnMessage = undefined;
@@ -332,32 +446,29 @@ class RoomTranscriber {
       this.lastPartialText = "";
     }
 
+    Logger.info(
+      `Stopping transcriber: producer=${this.producerId || "unknown"} chunks=${this.transcript.length} sttMessages=${this.sttMessageCount} audioBytes=${this.forwardedAudioBytes}`,
+    );
+
     if (this.sttSocket?.readyState === WebSocket.OPEN) {
       try {
         this.sttSocket.send(JSON.stringify({ eof: 1 }));
-      } catch {
-        // noop
-      }
+      } catch {}
     }
 
     this.removeListeners();
-
     this.sttSocket?.close();
 
     if (this.ffmpeg) {
       const ffmpegProcess = this.ffmpeg;
       try {
         ffmpegProcess.kill("SIGTERM");
-      } catch {
-        // noop
-      }
+      } catch {}
       this.ffmpegForceKillTimer = setTimeout(() => {
         if (ffmpegProcess.exitCode === null && !ffmpegProcess.killed) {
           try {
             ffmpegProcess.kill("SIGKILL");
-          } catch {
-            // noop
-          }
+          } catch {}
         }
       }, FFMPEG_FORCE_KILL_TIMEOUT_MS);
       ffmpegProcess.once("exit", () => {
@@ -370,14 +481,10 @@ class RoomTranscriber {
 
     try {
       this.consumer?.close();
-    } catch {
-      // noop
-    }
+    } catch {}
     try {
       this.transport?.close();
-    } catch {
-      // noop
-    }
+    } catch {}
 
     this.consumer = undefined;
     this.transport = undefined;
