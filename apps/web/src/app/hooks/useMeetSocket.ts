@@ -1129,6 +1129,7 @@ export function useMeetSocket({
       for (const [producerId, consumer] of consumersRef.current.entries()) {
         if (consumer.closed || consumer.track?.readyState === "ended") {
           staleConsumerIds.push(producerId);
+
         }
       }
 
@@ -1466,7 +1467,8 @@ export function useMeetSocket({
             }
 
             const socket = io(sfuUrl, {
-              transports: ["websocket", "polling"],
+              transports: ["polling", "websocket"],
+              tryAllTransports: true,
               timeout: SOCKET_TIMEOUT_MS,
               reconnection: false,
               auth: { token },
